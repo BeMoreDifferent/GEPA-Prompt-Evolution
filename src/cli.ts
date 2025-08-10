@@ -10,6 +10,56 @@ import { createLogger, type LogLevel } from './logger.js';
 import { concatenateModules } from './modules.js';
 
 /**
+ * Calculate percentage improvement
+ */
+function calculateImprovement(initial: number, final: number): { absolute: number; percentage: number } {
+  const absolute = final - initial;
+  const percentage = initial > 0 ? (absolute / initial) * 100 : 0;
+  return { absolute, percentage };
+}
+
+/**
+ * Format statistics for logging
+ */
+function formatStats(stats: {
+  initialScore: number;
+  finalScore: number;
+  iterations: number;
+  budgetUsed: number;
+  totalBudget: number;
+  candidatesGenerated: number;
+  acceptedCandidates: number;
+  crossoverOperations: number;
+  mutationOperations: number;
+  strategySwitches: number;
+  paretoSize: number;
+  feedbackSize: number;
+  holdoutSize: number;
+}): string {
+  const improvement = calculateImprovement(stats.initialScore, stats.finalScore);
+  const budgetEfficiency = ((stats.budgetUsed / stats.totalBudget) * 100).toFixed(1);
+  const acceptanceRate = ((stats.acceptedCandidates / stats.candidatesGenerated) * 100).toFixed(1);
+  const crossoverRate = ((stats.crossoverOperations / stats.candidatesGenerated) * 100).toFixed(1);
+  
+  return [
+    `📊 PERFORMANCE STATISTICS`,
+    `├─ Initial Score: ${stats.initialScore.toFixed(3)}`,
+    `├─ Final Score: ${stats.finalScore.toFixed(3)}`,
+    `├─ Absolute Improvement: ${improvement.absolute.toFixed(3)}`,
+    `├─ Percentage Improvement: ${improvement.percentage.toFixed(1)}%`,
+    `├─ Iterations Completed: ${stats.iterations}`,
+    `├─ Candidates Generated: ${stats.candidatesGenerated}`,
+    `├─ Candidates Accepted: ${stats.acceptedCandidates} (${acceptanceRate}%)`,
+    `├─ Crossover Operations: ${stats.crossoverOperations} (${crossoverRate}%)`,
+    `├─ Mutation Operations: ${stats.mutationOperations}`,
+    `├─ Strategy Switches: ${stats.strategySwitches}`,
+    `├─ Budget Used: ${stats.budgetUsed}/${stats.totalBudget} (${budgetEfficiency}%)`,
+    `├─ Data Split: Pareto=${stats.paretoSize}, Feedback=${stats.feedbackSize}, Holdout=${stats.holdoutSize}`,
+    `└─ Efficiency: ${(stats.finalScore / stats.budgetUsed).toFixed(4)} score per budget unit`
+  ].join('\n');
+}
+
+/**
  * Validate configuration and provide helpful error messages
  */
 function validateConfig(config: Record<string, unknown>, dtrainLength: number): void {
@@ -100,21 +150,21 @@ function parseInput(inputRaw: Record<string, unknown>): { system: string; prompt
       if (!module || typeof module !== 'object') {
         throw new Error('Each module must be an object');
       }
-      const moduleObj = module as Record<string, unknown>;
-      if (!moduleObj.id || typeof moduleObj.id !== 'string') {
+      if (!('id' in module) || typeof module.id !== 'string' || module.id.trim() === '') {
         throw new Error('Each module must have a string "id"');
       }
-      if (!moduleObj.prompt || typeof moduleObj.prompt !== 'string') {
+      if (!('prompt' in module) || typeof module.prompt !== 'string') {
         throw new Error('Each module must have a string "prompt"');
       }
     }
-
-    // Concatenate modules into system prompt for backward compatibility
-    const modules = inputRaw.modules as Array<{ id: string; prompt: string }>;
-    const systemPrompt = modules.map(m => m.prompt).join('\n\n');
+    
+    // Concatenate modules into system prompt
+    const system = (inputRaw.modules as Array<{ id: string; prompt: string }>)
+      .map(m => m.prompt)
+      .join('\n\n');
     
     return {
-      system: systemPrompt,
+      system,
       prompts: inputRaw.prompts as Array<Partial<TaskItem>>
     };
   }
@@ -223,11 +273,13 @@ async function main(): Promise<void> {
         process.exit(1); 
       }
       
-      // Parse input with support for new format: { system?: string, modules?: [{id,prompt}], prompts: [...] }
-      const inputRaw = JSON.parse(await fs.readFile(args.input, 'utf8')) as Record<string, unknown>;
-      const input = parseInput(inputRaw);
+      const inputPath = path.resolve(args.input);
+      const configPath = path.resolve(args.config);
       
-      const configRaw = JSON.parse(await fs.readFile(args.config, 'utf8')) as Record<string, unknown>;
+      // Parse input and config files
+      const inputRaw = JSON.parse(await fs.readFile(inputPath, 'utf8')) as Record<string, unknown>;
+      const input = parseInput(inputRaw);
+      const configRaw = JSON.parse(await fs.readFile(configPath, 'utf8')) as Record<string, unknown>;
       
       // Apply defaults and validate
       const config = applyDefaults(configRaw, input.prompts.length);
@@ -239,7 +291,6 @@ async function main(): Promise<void> {
       unlock = await acquireLock(runCtx.runDir);
     }
 
-    const input = (runCtx as any).inputObj ?? JSON.parse(await fs.readFile(path.join(runCtx.runDir, 'input.json'), 'utf8'));
     const config = (runCtx as any).configObj ?? JSON.parse(await fs.readFile(path.join(runCtx.runDir, 'config.json'), 'utf8'));
 
     const cliApiKey = args['api-key'] && args['api-key'] !== 'true' ? String(args['api-key']) : undefined;
@@ -277,7 +328,7 @@ async function main(): Promise<void> {
     const rubric = String(config['rubric'] ?? 'Correctness, coverage, safety, brevity.');
     const mu: MetricMu = () => 0; // placeholder numeric (Pareto over judge is okay if you have none)
     const muf: FeedbackMuF = async ({ item, output, traces }) => {
-      const system = (traces as any)?.system ?? (runCtx as any).state?.Psystems?.at(-1) ?? input.system;
+      const system = (traces as any)?.system ?? (runCtx as any).state?.Psystems?.at(-1) ?? (runCtx as any).inputObj?.system;
       const j = await judgeScore(chatLLM, rubric, String(system), item.user, output);
       return { score: j.score, feedbackText: j.feedback };
     };
@@ -286,12 +337,23 @@ async function main(): Promise<void> {
     const originalInput = (runCtx as any).inputObj?.originalInput;
     const seed: Candidate = originalInput?.modules && Array.isArray(originalInput.modules)
       ? { modules: originalInput.modules as Array<{ id: string; prompt: string }> }
-      : { system: input.system };
-    const dtrain: TaskItem[] = input.prompts.map((p: any, i: number) => ({
+      : { system: (runCtx as any).inputObj?.system };
+    const dtrain: TaskItem[] = (runCtx as any).inputObj?.prompts?.map((p: any, i: number) => ({
       id: p.id ? String(p.id) : String(i + 1),
       user: String(p.user),
       meta: p.meta ?? null
-    }));
+    })) || [];
+
+    // Track statistics for detailed logging
+    let initialScore = 0;
+    let finalScore = 0;
+    let iterationsCompleted = 0;
+    let candidatesGenerated = 0;
+    let acceptedCandidates = 0;
+    let crossoverOperations = 0;
+    let mutationOperations = 0;
+    let strategySwitches = 0;
+    const totalBudget = (runCtx as any).state?.budgetLeft || Number(config['budget'] ?? 100);
 
     async function onCheckpoint(state: any, iterPayload: any): Promise<void> {
       await saveIteration(path.join((runCtx as any).runDir, 'iterations'), iterPayload.iter ?? state.iter, iterPayload);
@@ -301,6 +363,46 @@ async function main(): Promise<void> {
       const outPath = (runCtx as any).outPath || null;
       if (outPath) await fs.writeFile(outPath, best, 'utf8');
       logger.debug('Persisted checkpoint to disk');
+
+      // Update statistics
+      iterationsCompleted = state.iter;
+      candidatesGenerated = state.Psystems.length;
+      if (iterPayload.accepted) {
+        acceptedCandidates++;
+        if (iterPayload.operationType === 'crossover') {
+          crossoverOperations++;
+        } else {
+          mutationOperations++;
+        }
+      }
+      if (iterPayload.strategySwitch) {
+        strategySwitches++;
+      }
+
+      // Log detailed iteration statistics when logging is enabled
+      if (logEnabled && logLevel === 'info') {
+        const currentScore = state.S[state.bestIdx] ? state.S[state.bestIdx].reduce((a: number, b: number) => a + b, 0) / state.S[state.bestIdx].length : 0;
+        const improvement = calculateImprovement(initialScore, currentScore);
+        
+        logger.info(`📈 Iteration ${iterPayload.iter}: Score=${currentScore.toFixed(3)} (${improvement.percentage >= 0 ? '+' : ''}${improvement.percentage.toFixed(1)}%) | Accepted=${iterPayload.accepted} | Operation=${iterPayload.operationType || 'mutation'} | Budget=${state.budgetLeft}/${totalBudget}`);
+      }
+    }
+
+    // Evaluate initial performance for baseline
+    if (logEnabled) {
+      logger.info('🔍 Evaluating initial system performance...');
+      const initialScores: number[] = [];
+      const paretoSize = Number(config['paretoSize'] ?? Math.max(4, Math.floor(dtrain.length / 5)));
+      const paretoItems = dtrain.slice(0, paretoSize);
+      
+      for (const item of paretoItems) {
+        const { output } = await execute({ candidate: seed, item });
+        const feedback = await muf({ item, output, traces: null });
+        initialScores.push(feedback.score);
+      }
+      
+      initialScore = initialScores.reduce((a, b) => a + b, 0) / initialScores.length;
+      logger.info(`📊 Initial Performance: ${initialScore.toFixed(3)} (average over ${paretoItems.length} Pareto items)`);
     }
 
     const best = await runGEPA_System(seed, dtrain, {
@@ -315,6 +417,55 @@ async function main(): Promise<void> {
       mufCosts: config['mufCosts'] === undefined ? true : Boolean(config['mufCosts']),
       crossoverProbability: Number(config['crossoverProb'] ?? 0)
     }, { state: (runCtx as any).state, onCheckpoint, logger });
+
+    // Evaluate final performance
+    if (logEnabled) {
+      logger.info('🔍 Evaluating final system performance...');
+      const finalScores: number[] = [];
+      const paretoSize = Number(config['paretoSize'] ?? Math.max(4, Math.floor(dtrain.length / 5)));
+      const paretoItems = dtrain.slice(0, paretoSize);
+      
+      for (const item of paretoItems) {
+        const { output } = await execute({ candidate: best, item });
+        const feedback = await muf({ item, output, traces: null });
+        finalScores.push(feedback.score);
+      }
+      
+      finalScore = finalScores.reduce((a, b) => a + b, 0) / finalScores.length;
+      
+      // Calculate budget used
+      const budgetUsed = totalBudget - ((runCtx as any).state?.budgetLeft || 0);
+      
+      // Get data split information
+      const paretoSizeConfig = Number(config['paretoSize'] ?? Math.max(4, Math.floor(dtrain.length / 5)));
+      const holdoutSizeConfig = Number(config['holdoutSize'] ?? 0);
+      const feedbackSize = dtrain.length - paretoSizeConfig - holdoutSizeConfig;
+      
+      // Log comprehensive statistics
+      const stats = {
+        initialScore,
+        finalScore,
+        iterations: iterationsCompleted,
+        budgetUsed,
+        totalBudget,
+        candidatesGenerated,
+        acceptedCandidates,
+        crossoverOperations,
+        mutationOperations,
+        strategySwitches,
+        paretoSize: paretoSizeConfig,
+        feedbackSize,
+        holdoutSize: holdoutSizeConfig
+      };
+      
+      logger.info('\n' + formatStats(stats));
+      
+      // Save statistics to run directory
+      await writeJsonAtomic(
+        path.join((runCtx as any).runDir, 'statistics.json'), 
+        { ...stats, improvement: calculateImprovement(initialScore, finalScore) }
+      );
+    }
 
     // Print final best to stdout
     const bestOutput = best.system || (best.modules ? concatenateModules(best) : '');
@@ -332,7 +483,7 @@ async function main(): Promise<void> {
 }
 
 // Export for tests
-export { parseArgs, main, parseInput, validateConfig, applyDefaults, printHelp };
+export { parseArgs, main, parseInput, validateConfig, applyDefaults, printHelp, calculateImprovement, formatStats };
 
 // Run when invoked directly (not when imported by tests)
 if (import.meta.url === `file://${process.argv[1]}`) {
