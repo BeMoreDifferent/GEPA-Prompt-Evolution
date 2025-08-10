@@ -1,0 +1,16 @@
+{
+  "actorModel": "gpt-5-nano",
+  "judgeModel": "gpt-5-nano",
+  "budget": 25,
+  "minibatchSize": 4,
+  "paretoSize": 8,
+  "holdoutSize": 6,
+  "epsilonHoldout": 0.02,
+  "actorTemperature": 0.4,
+  "actorMaxTokens": 512,
+  "rubric": "Correctness, coverage, safety, brevity.",
+  "strategiesPath": "strategies/strategies.json",
+  "scoreForPareto": "muf",
+  "mufCosts": true,
+  "crossoverProb": 0.1
+}

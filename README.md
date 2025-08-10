@@ -95,6 +95,10 @@ Edge cases handled by CLI:
 
 ### Input format
 
+GEPA supports two input formats: traditional single system prompt and modular system prompts.
+
+#### Traditional format (backward compatible)
+
 `examples/input.min.prompts.json`:
 
 ```json
@@ -106,9 +110,41 @@ Edge cases handled by CLI:
 }
 ```
 
+#### Modular format (new)
+
+`examples/input.modules.json`:
+
+```json
+{
+  "modules": [
+    {
+      "id": "intro",
+      "prompt": "You are a helpful assistant that provides accurate and concise answers."
+    },
+    {
+      "id": "safety",
+      "prompt": "Always prioritize safety and avoid harmful content."
+    },
+    {
+      "id": "style",
+      "prompt": "Be clear, concise, and well-structured in your responses."
+    }
+  ],
+  "prompts": [
+    { "id": "p1", "user": "Name two benefits of unit tests." }
+  ]
+}
+```
+
+**Fallback behavior**: If both `system` and `modules` are provided, the `system` prompt takes precedence for backward compatibility.
+
+**Module concatenation**: When using modules, they are automatically concatenated with double newlines (`\n\n`) to form a single system prompt for the default executor.
+
 `prompts[i].meta` is optional and forwarded to numeric metrics if you supply one.
 
-Another example (`examples/input.prompts.json`) shows a multi-item dataset. The `examples/input.atomic_facts.json` demonstrates a structured evaluation task.
+Other examples:
+- `examples/input.prompts.json` shows a multi-item dataset
+- `examples/input.atomic_facts.json` demonstrates a structured evaluation task
 
 ---
 
@@ -129,6 +165,8 @@ Configs live in JSON files (see `examples/config.min.json` and `examples/config.
 - `strategiesPath` (string, optional): Path to strategy hints JSON (default: `strategies/strategies.json`).
 - `baseURL` (string, optional): Override OpenAI API base URL.
 - `scoreForPareto` ("muf" | "mu", optional): Which scorer populates the Pareto score matrix `S`. Default "muf" (judge score). Set to "mu" to use numeric metric.
+- `mufCosts` (boolean, optional): Whether judge calls (muf) should consume budget. Default `true`.
+- `crossoverProb` (number, optional): Probability of using crossover (merge) instead of mutation. Range [0,1]. Default `0`.
 
 Example (`examples/config.min.json`):
 
@@ -145,6 +183,27 @@ Example (`examples/config.min.json`):
   "actorMaxTokens": 700,
   "rubric": "Evaluate only the JSON quality and adherence to rules...",
   "strategiesPath": "strategies/strategies.json"
+}
+```
+
+Example with new config keys (`examples/config.modular.json`):
+
+```json
+{
+  "actorModel": "gpt-5-nano",
+  "judgeModel": "gpt-5-nano",
+  "budget": 25,
+  "minibatchSize": 4,
+  "paretoSize": 8,
+  "holdoutSize": 6,
+  "epsilonHoldout": 0.02,
+  "actorTemperature": 0.4,
+  "actorMaxTokens": 512,
+  "rubric": "Correctness, coverage, safety, brevity.",
+  "strategiesPath": "strategies/strategies.json",
+  "scoreForPareto": "muf",
+  "mufCosts": true,
+  "crossoverProb": 0.1
 }
 ```
 

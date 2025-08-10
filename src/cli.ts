@@ -7,6 +7,54 @@ import { judgeScore } from './judge.js';
 import { initRun, resumeRun, acquireLock, saveIteration, saveState, writeJsonAtomic } from './persist.js';
 import type { Candidate, GepaOptions, MetricMu, FeedbackMuF, TaskItem } from './types.js';
 import { createLogger, type LogLevel } from './logger.js';
+import { concatenateModules } from './modules.js';
+
+/**
+ * Parse input with support for new format: { system?: string, modules?: [{id,prompt}], prompts: [...] }
+ * Validates input structure and handles fallbacks
+ */
+function parseInput(inputRaw: Record<string, unknown>): { system: string; prompts: Array<Partial<TaskItem>> } {
+  // Validate that prompts array exists
+  if (!inputRaw.prompts || !Array.isArray(inputRaw.prompts)) {
+    throw new Error('Input must contain a "prompts" array');
+  }
+
+  // Handle system prompt (backward compatibility)
+  if (inputRaw.system && typeof inputRaw.system === 'string') {
+    return {
+      system: inputRaw.system,
+      prompts: inputRaw.prompts as Array<Partial<TaskItem>>
+    };
+  }
+
+  // Handle modules
+  if (inputRaw.modules && Array.isArray(inputRaw.modules)) {
+    // Validate modules structure
+    for (const module of inputRaw.modules) {
+      if (!module || typeof module !== 'object') {
+        throw new Error('Each module must be an object');
+      }
+      const moduleObj = module as Record<string, unknown>;
+      if (!moduleObj.id || typeof moduleObj.id !== 'string') {
+        throw new Error('Each module must have a string "id"');
+      }
+      if (!moduleObj.prompt || typeof moduleObj.prompt !== 'string') {
+        throw new Error('Each module must have a string "prompt"');
+      }
+    }
+
+    // Concatenate modules into system prompt for backward compatibility
+    const modules = inputRaw.modules as Array<{ id: string; prompt: string }>;
+    const systemPrompt = modules.map(m => m.prompt).join('\n\n');
+    
+    return {
+      system: systemPrompt,
+      prompts: inputRaw.prompts as Array<Partial<TaskItem>>
+    };
+  }
+
+  throw new Error('Input must contain either "system" or "modules"');
+}
 
 function parseArgs(argv: string[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -39,10 +87,14 @@ async function main(): Promise<void> {
       unlock = await acquireLock(runCtx.runDir);
     } else {
       if (!args.input || !args.config) { console.error('Missing --input or --config'); process.exit(1); }
-      const input = JSON.parse(await fs.readFile(args.input, 'utf8')) as { system: string; prompts: Array<Partial<TaskItem>> };
+      
+      // Parse input with support for new format: { system?: string, modules?: [{id,prompt}], prompts: [...] }
+      const inputRaw = JSON.parse(await fs.readFile(args.input, 'utf8')) as Record<string, unknown>;
+      const input = parseInput(inputRaw);
+      
       const config = JSON.parse(await fs.readFile(args.config, 'utf8')) as Record<string, unknown>;
       const outPath = args.out ? path.resolve(args.out) : null;
-      runCtx = await initRun({ runsRoot, inputObj: input, configObj: config, outFile: outPath });
+      runCtx = await initRun({ runsRoot, inputObj: { ...input, originalInput: inputRaw }, configObj: config, outFile: outPath });
       logger.step('Init run', runCtx.runDir);
       unlock = await acquireLock(runCtx.runDir);
     }
@@ -64,8 +116,8 @@ async function main(): Promise<void> {
 
     // executor (actor)
     const execute: GepaOptions['execute'] = async ({ candidate, item }) => {
-      // Concatenate modules for backward compatibility
-      const systemPrompt = candidate.system || (candidate.modules ? candidate.modules.map(m => m.prompt).join('\n\n') : '');
+      // Handle both system and modular candidates
+      const systemPrompt = candidate.system || (candidate.modules ? concatenateModules(candidate) : '');
       const prompt = [
         'SYSTEM:\n' + systemPrompt,
         'USER:\n' + item.user,
@@ -84,7 +136,11 @@ async function main(): Promise<void> {
       return { score: j.score, feedbackText: j.feedback };
     };
 
-    const seed: Candidate = { system: input.system };
+    // Create seed candidate - support both system and modules
+    const originalInput = (runCtx as any).inputObj?.originalInput;
+    const seed: Candidate = originalInput?.modules && Array.isArray(originalInput.modules)
+      ? { modules: originalInput.modules as Array<{ id: string; prompt: string }> }
+      : { system: input.system };
     const dtrain: TaskItem[] = input.prompts.map((p: any, i: number) => ({
       id: p.id ? String(p.id) : String(i + 1),
       user: String(p.user),
@@ -110,7 +166,8 @@ async function main(): Promise<void> {
       epsilonHoldout: Number(config['epsilonHoldout'] ?? 0.02),
       ...(config['strategiesPath'] ? { strategiesPath: String(config['strategiesPath']) } : { strategiesPath: DEFAULT_STRATEGIES_PATH }),
       ...(config['scoreForPareto'] === 'mu' ? { scoreForPareto: 'mu' as const } : { scoreForPareto: 'muf' as const }),
-      mufCosts: config['mufCosts'] === undefined ? true : Boolean(config['mufCosts'])
+      mufCosts: config['mufCosts'] === undefined ? true : Boolean(config['mufCosts']),
+      crossoverProbability: Number(config['crossoverProb'] ?? 0)
     }, { state: (runCtx as any).state, onCheckpoint, logger });
 
     // Print final best to stdout
@@ -121,7 +178,7 @@ async function main(): Promise<void> {
 }
 
 // Export for tests
-export { parseArgs, main };
+export { parseArgs, main, parseInput };
 
 // Run when invoked directly (not when imported by tests)
 if (import.meta.url === `file://${process.argv[1]}`) {
