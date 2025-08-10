@@ -13,11 +13,13 @@ export interface SeedArgs {
   llm: LLM;
   /** Optional budget guard: max total LLM calls allowed during seeding (mutations + evals) */
   budgetLeft?: number;
+  /** Whether judge (muf) calls should count towards usedCalls (default true) */
+  mufCosts?: boolean;
 }
 
 /** Generate seeded candidates with top-K strategies and keep the top few by average judge score */
 export async function seedPopulation({
-  seed, screen, strategies, K, execute, muf, llm, budgetLeft
+  seed, screen, strategies, K, execute, muf, llm, budgetLeft, mufCosts = true
 }: SeedArgs): Promise<{ candidates: Array<Candidate & { _via: string; _uplift: number }>; usedCalls: number }> {
   const out: Array<Candidate & { _via: string; _uplift: number }> = [{ system: seed.system, _via: 'seed', _uplift: 0 }];
   let usedCalls = 0;
@@ -31,9 +33,13 @@ export async function seedPopulation({
     for (const item of screen) {
       if (budgetLeft !== undefined && budgetLeft <= 0) break;
       const { output, traces } = await execute({ candidate: { system: sys2 }, item });
+      // Judge may or may not count to usedCalls
       const f = await muf({ item, output, traces: { ...(traces ?? {}), system: sys2 } });
       scores.push(f.score);
-      usedCalls += 1; if (budgetLeft !== undefined) budgetLeft -= 1;
+      // Count execute always, plus muf when configured
+      const delta = 1 + (mufCosts ? 1 : 0);
+      usedCalls += delta;
+      if (budgetLeft !== undefined) budgetLeft -= delta;
     }
     out.push({ system: sys2, _via: s.id, _uplift: avg(scores) });
   }

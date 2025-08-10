@@ -37,13 +37,15 @@ export async function runGEPA_System(
     execute, mu, muf, llm,
     budget, minibatchSize: b, paretoSize: nPareto,
     holdoutSize = 0, epsilonHoldout = 0.02, strategiesPath = DEFAULT_STRATEGIES_PATH,
-    scoreForPareto = 'muf'
+    scoreForPareto = 'muf',
+    mufCosts = true
   } = opts;
   const logger: Logger = persist?.logger ?? silentLogger;
   logger.step('GEPA start', `budget=${budget}, pareto=${nPareto}, minibatch=${b}`);
 
-  // Scaffold: wire budget tracker behind disabled flag (no behavior change)
-  const budgetTracker = new BudgetTracker(budget, false);
+  // Budget tracker: enabled and authoritative for decrements
+  const startBudget = persist?.state?.budgetLeft ?? budget;
+  const budgetTracker = new BudgetTracker(startBudget, true);
 
   // ---- resume or fresh ----
   let state: GEPAState = persist?.state ?? {
@@ -90,18 +92,21 @@ export async function runGEPA_System(
 
   // Helper to compute a Pareto row using configured scorer
   const scoreParetoRow = async (cand: Candidate): Promise<number[]> => {
-    if (scoreForPareto === 'mu') {
-      return Promise.all(Dpareto.map(async (item) => {
-        const { output } = await execute({ candidate: cand, item });
-        return mu(output, item.meta ?? null);
-      }));
-    }
-    // Default to 'muf'
-    return Promise.all(Dpareto.map(async (item) => {
+    const row: number[] = [];
+    for (const item of Dpareto) {
+      if (!budgetTracker.canAfford(1)) break;
       const { output, traces } = await execute({ candidate: cand, item });
-      const f = await muf({ item, output, traces: traces ?? null });
-      return f.score;
-    }));
+      budgetTracker.dec(1, 'pareto:execute');
+      if (scoreForPareto === 'mu') {
+        row.push(mu(output, item.meta ?? null));
+      } else {
+        if (mufCosts && !budgetTracker.canAfford(1)) break;
+        const f = await muf({ item, output, traces: traces ?? null });
+        if (mufCosts) budgetTracker.dec(1, 'pareto:muf');
+        row.push(f.score);
+      }
+    }
+    return row;
   };
 
   // Seed Pareto row for initial candidate if missing
@@ -179,15 +184,16 @@ export async function runGEPA_System(
     const screen = Dfb.slice(0, Math.max(3, Math.floor(Dfb.length * 0.1)));
     // Reserve budget for at least one full iteration (before+after judge calls)
     const reserveCalls = Math.max(3, 2 * b);
-    const allowedForSeeding = state.budgetLeft > reserveCalls ? (state.budgetLeft - reserveCalls) : 0;
+    const allowedForSeeding = budgetTracker.remaining() > reserveCalls ? (budgetTracker.remaining() - reserveCalls) : 0;
     const seeded = await seedPopulation({
       seed: { system: state.Psystems[0] }, screen, strategies: activeStrategies,
       K: Math.min(6, activeStrategies.length), execute, muf, llm,
-      budgetLeft: allowedForSeeding
+      budgetLeft: allowedForSeeding,
+      mufCosts
     });
     // Precisely decrement by measured usedCalls
-    state.budgetLeft = Math.max(0, state.budgetLeft - seeded.usedCalls);
-    budgetTracker.dec(seeded.usedCalls, 'seeding');
+    if (seeded.usedCalls > 0) budgetTracker.dec(seeded.usedCalls, 'seeding');
+    state.budgetLeft = budgetTracker.remaining();
     for (const c of seeded.candidates.slice(1)) {
       P.push({ system: c.system });
       state.Psystems.push(c.system);
@@ -205,14 +211,18 @@ export async function runGEPA_System(
     if (!Dhold.length) return 0;
     const scores: number[] = [];
     for (const item of Dhold) {
-      const { output } = await execute({ candidate: cand, item });
-      const jf = await opts.muf({ item, output });
+      if (!budgetTracker.canAfford(1)) break;
+      const { output, traces } = await execute({ candidate: cand, item });
+      budgetTracker.dec(1, 'holdout:execute');
+      if (mufCosts && !budgetTracker.canAfford(1)) break;
+      const jf = await opts.muf({ item, output, traces: traces ?? null });
+      if (mufCosts) budgetTracker.dec(1, 'holdout:muf');
       scores.push(jf.score);
     }
     return avg(scores);
   };
 
-  while (state.budgetLeft > 0) {
+  while (budgetTracker.remaining() > 0) {
     const k = selectCandidate(P, S);
     const parent = P[k];
     logger.step(`Iter ${state.iter + 1}`, `pick k=${k}`);
@@ -221,17 +231,16 @@ export async function runGEPA_System(
     const M = sampleMinibatch(Dfb, b);
     const before: Array<{ id: string; score: number; feedback: string; output: string }> = [];
     for (const item of M) {
+      if (!budgetTracker.canAfford(1 + (mufCosts ? 1 : 0))) break;
       const { output, traces } = await execute({ candidate: parent, item });
+      budgetTracker.dec(1, 'before:execute');
       const f = await opts.muf({ item, output, traces: traces ?? null });
+      if (mufCosts) budgetTracker.dec(1, 'before:muf');
       before.push({ id: item.id, score: f.score, feedback: f.feedbackText, output });
-      if (--state.budgetLeft <= 0) {
-        budgetTracker.dec(1, 'before');
-        break;
-      }
-      budgetTracker.dec(1, 'before');
     }
     const sigma = avg(before.map(x => x.score));
-    if (state.budgetLeft <= 0) break;
+    state.budgetLeft = budgetTracker.remaining();
+    if (budgetTracker.remaining() <= 0) break;
 
     // Mutate with chosen strategy
     // Decide exploration vs exploitation and whether to drop hints (pure GEPA reflection)
@@ -252,21 +261,21 @@ export async function runGEPA_System(
       output: x.output,
       feedback: x.feedback
     }));
+    if (!budgetTracker.canAfford(1)) break;
     const newSystem = await proposeNewSystem(llm, parent.system, examples, hint);
+    budgetTracker.dec(1, 'propose');
     logger.debug(`New system preview: ${(newSystem || '').slice(0, 120)}`);
     const child: Candidate = { system: newSystem };
 
     // Re-evaluate on same minibatch
     const afterScores: number[] = [];
     for (const item of M) {
+      if (!budgetTracker.canAfford(1 + (mufCosts ? 1 : 0))) break;
       const { output, traces } = await execute({ candidate: child, item });
+      budgetTracker.dec(1, 'after:execute');
       const f = await opts.muf({ item, output, traces: traces ?? null });
+      if (mufCosts) budgetTracker.dec(1, 'after:muf');
       afterScores.push(f.score);
-      if (--state.budgetLeft <= 0) {
-        budgetTracker.dec(1, 'after');
-        break;
-      }
-      budgetTracker.dec(1, 'after');
     }
     const sigmaP = avg(afterScores);
 
@@ -331,6 +340,7 @@ export async function runGEPA_System(
       logger.debug('Checkpoint saved');
     }
     state.bandit = bandit.serialize();
+    state.budgetLeft = budgetTracker.remaining();
   }
 
   logger.step('GEPA done', `bestIdx=${state.bestIdx}`);

@@ -69,6 +69,8 @@ export interface GepaOptions {
   strategySchedule?: StrategyScheduleOptions;
   /** Which scorer populates the Pareto score matrix S; default 'muf' (judge). */
   scoreForPareto?: 'muf' | 'mu';
+  /** Whether judge calls (muf) should consume budget; default true */
+  mufCosts?: boolean;
 }
 
 /** Serializable bandit state */

@@ -107,7 +107,8 @@ async function main(): Promise<void> {
       holdoutSize: Number(config['holdoutSize'] ?? 0),
       epsilonHoldout: Number(config['epsilonHoldout'] ?? 0.02),
       ...(config['strategiesPath'] ? { strategiesPath: String(config['strategiesPath']) } : { strategiesPath: DEFAULT_STRATEGIES_PATH }),
-      ...(config['scoreForPareto'] === 'mu' ? { scoreForPareto: 'mu' as const } : { scoreForPareto: 'muf' as const })
+      ...(config['scoreForPareto'] === 'mu' ? { scoreForPareto: 'mu' as const } : { scoreForPareto: 'muf' as const }),
+      mufCosts: config['mufCosts'] === undefined ? true : Boolean(config['mufCosts'])
     }, { state: (runCtx as any).state, onCheckpoint, logger });
 
     // Print final best to stdout
