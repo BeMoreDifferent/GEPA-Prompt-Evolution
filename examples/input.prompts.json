@@ -1,0 +1,11 @@
+{
+  "system": "You are a helpful assistant. Be concise and safe.",
+  "prompts": [
+    { "id": "p1", "user": "Summarize pros/cons of Redis vs. Postgres for caching." },
+    { "id": "p2", "user": "Plan a 2-week onboarding for a junior backend developer." },
+    { "id": "p3", "user": "Estimate the number of piano tuners in Berlin and explain your steps." },
+    { "id": "p4", "user": "Design a quick user test to validate a signup flow." }
+  ]
+}
+
+

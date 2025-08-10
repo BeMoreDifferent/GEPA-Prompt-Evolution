@@ -1,0 +1,82 @@
+[
+    {
+        "id": "polya-4step",
+        "hint": "Apply Pólya’s 4 steps: Understand, Plan, Execute, Reflect. Restate task, outline minimal plan, do it, then brief self-check."
+    },
+    {
+        "id": "fermi-estimate",
+        "hint": "When unknown quantities appear, use Fermi estimation: list assumptions, compute order-of-magnitude, provide range and key drivers."
+    },
+    {
+        "id": "dimensional-analysis",
+        "hint": "For numeric/physics problems, add unit sanity checks and dimensional analysis; show conversions; flag mismatches."
+    },
+    {
+        "id": "mece-structuring",
+        "hint": "Organize content using MECE categories (mutually exclusive, collectively exhaustive); avoid overlap and cover the space."
+    },
+    {
+        "id": "smart-goals",
+        "hint": "When planning, translate into SMART objectives (Specific, Measurable, Achievable, Relevant, Time-bound) with brief metrics."
+    },
+    {
+        "id": "cpm-critical-path",
+        "hint": "For projects: list tasks, dependencies, durations; identify critical path; suggest fast-track options; note path risks."
+    },
+    {
+        "id": "raci-roles",
+        "hint": "If multiple stakeholders, add a tiny RACI: Responsible, Accountable, Consulted, Informed."
+    },
+    {
+        "id": "double-diamond",
+        "hint": "Use Double Diamond: Discover→Define→Develop→Deliver; note divergence vs convergence; propose a quick user test."
+    },
+    {
+        "id": "tdd-microcycle",
+        "hint": "Coding help uses TDD micro-cycles: specify a tiny test (in prose), implement minimally, then refactor note."
+    },
+    {
+        "id": "rubber-duck",
+        "hint": "If debugging, ask user to articulate steps precisely (rubber-duck); propose a reproducible test."
+    },
+    {
+        "id": "kano-prioritization",
+        "hint": "Prioritize features via Kano: Must-be, One-dimensional, Attractive, Indifferent; recommend sequencing."
+    },
+    {
+        "id": "crisp-dm",
+        "hint": "For data work, follow CRISP-DM: business understanding, data understanding, prep, modeling, evaluation, deployment."
+    },
+    {
+        "id": "bluf-writing",
+        "hint": "Lead with BLUF (Bottom Line Up Front), then compact rationale and next steps."
+    },
+    {
+        "id": "risk-register",
+        "hint": "Include a tiny risk register: top 3 risks with probability/impact and a mitigation."
+    },
+    {
+        "id": "evidence-and-cite",
+        "hint": "Prefer verification and citations; mark time-sensitive claims; say 'unknown' rather than speculate."
+    },
+    {
+        "id": "json-contract",
+        "hint": "If structure is expected, return strict JSON schema and use 'unknown' for missing fields; no extra prose."
+    },
+    {
+        "id": "tool-first",
+        "hint": "Switch to tools/browsing when uncertainty is high; state what to verify and thresholds."
+    },
+    {
+        "id": "pareto-8020",
+        "hint": "Apply 80/20: identify few inputs that drive most outcomes; focus recommendations there."
+    },
+    {
+        "id": "checklist-safety",
+        "hint": "Insert a short safety/compliance checklist before risky actions; refuse minimally if unsafe."
+    },
+    {
+        "id": "design-critique",
+        "hint": "When giving designs, add quick critique: hierarchy, contrast, spacing, typography; suggest 2 iterations."
+    }
+]

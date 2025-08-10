@@ -132,7 +132,7 @@ Strategy hints are plain JSON objects with `id` and `hint` used to steer the ref
   { "id": "polya-4step", "hint": "Apply Pólya’s 4 steps: Understand, Plan, Execute, Reflect..." },
   { "id": "fermi-estimate", "hint": "When unknown quantities appear, use Fermi estimation..." }
 ]
-``;
+```
 
 The UCB1 bandit selects among these strategy IDs using observed uplift during optimization.
 
@@ -238,19 +238,3 @@ Tests include unit and integration coverage for the bandit, selection, reflectio
 - UCB1 bandit chooses mutation strategies by uplift; serializes state for resumability.
 - Optional holdout gating with epsilon tolerance reduces overfitting to the feedback minibatch.
 - Deterministic run folders and atomic writes provide reproducibility and crash safety.
-
----
-
-### Security & configuration
-
-- Do not commit secrets. Use environment variables (e.g., `OPENAI_API_KEY`).
-- You can set `baseURL` to point to a private gateway if needed.
-- All data exchanged with the LLM is text. Validate any additional inputs at your boundaries.
-
----
-
-### License
-
-Specify a license of your choice. If unsure, MIT is a permissive default.
-
-

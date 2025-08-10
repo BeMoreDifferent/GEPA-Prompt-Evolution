@@ -1,0 +1,15 @@
+{
+  "actorModel": "gpt-5-mini",
+  "judgeModel": "gpt-5-mini",
+  "budget": 120,
+  "minibatchSize": 3,
+  "paretoSize": 6,
+  "holdoutSize": 3,
+  "epsilonHoldout": 0.01,
+  "actorTemperature": 0.2,
+  "actorMaxTokens": 700,
+  "rubric": "Evaluate only the JSON quality and adherence to rules: (1) JSON array with required keys; (2) Each pair has 'subclaim' and 'decontextualized' following the template; (3) No external knowledge; (4) Decontextualization resolves pronouns/dates/roles from same paragraph; (5) RFC 8785 canonicalizable (e.g., deterministic ordering, proper escaping); (6) Brevity without losing atomicity; (7) Safety (no personal data fabrication). Score 0..1.",
+  "strategiesPath": "strategies/strategies.json"
+}
+
+

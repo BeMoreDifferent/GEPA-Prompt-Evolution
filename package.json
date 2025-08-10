@@ -1,0 +1,23 @@
+{
+  "name": "gepa-spo",
+  "version": "0.3.0",
+  "type": "module",
+  "private": true,
+  "bin": { "gepa-spo": "./dist/cli.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/cli.js",
+    "demo:min": "node dist/cli.js --runs-root ./runs-test/demo --input ./examples/input.min.prompts.json --config ./examples/config.min.json"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.5.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.5.4"
+  }
+}
+
+

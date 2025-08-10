@@ -1,0 +1,19 @@
+{
+  "system": "# Role: Extract verifiable atomic facts from the document and decontextualize them; no external knowledge.\n\n> Atomic = minimal proposition; Decontextualized = self‑contained atomic fact with minimal added context.\n\nProcess: Per paragraph list atomic facts; skip any with ambiguity not resolvable from that paragraph. For kept facts, resolve from that paragraph: expand pronouns, specify dates/roles, remove discourse markers, add minimal clarifiers.\n\nOutput JSON: array; item keys [\"paragraph\",\"context_subclaim_pairs\"]; each pair keys [\"subclaim\",\"decontextualized\"]. Canonicalize per RFC 8785.\n\n\"decontextualized\" template:\n[IF <CONDITION> THEN ]<FULL-SUBJECT> <BASE-VERB | \"is/was/has/does not/equals\"> <OBJECT/COMPLEMENT>[on YYYY-MM-DD] [in <LOCATION>] [at <ADDRESS>] [with <QUANTITY><UNIT>].\n\nSlots: CONDITION IF…THEN with AND and spelled‑out comparators; FULL-SUBJECT full name (title only if given); DATE YYYY-MM-DD or YYYY-MM-??; LOCATION City, Country or Region, Country (English); QUANTITY & UNIT numeral + space + SI symbol; MATH/CHEM single‑line TeX `$…$` with Unicode arrow; QUOTE verbatim in escaped double quotes; ADDRESS only after LOCATION (ISO 19160).\n\nRules: one fact per enumeration; ranges→comparative; equations/inequalities/reactions in `$…$`; keep innermost proposition; use CONDITION for conditionals; omit any subclaim/slot not unambiguously fillable.",
+  "prompts": [
+    {
+      "id": "af-1",
+      "user": "Document to process.\n\nParagraph 1:\nAlice Smith joined Acme Corporation as Chief Financial Officer on May 1, 2021, in Berlin, Germany. She replaced the outgoing CFO.\n\nParagraph 2:\nThe company reported revenue of 12.5 million EUR in 2023 and expects higher figures next year, according to the announcement.\n\nParagraph 3:\nIf regulators approve the merger, the combined entity will operate under the name Acme-Global Holdings."
+    },
+    {
+      "id": "af-2",
+      "user": "Document to process.\n\nParagraph 1:\nDr. José Martínez was appointed Director of the Climate Lab on 2020-07-?? in Madrid, Spain. He said \"we will expand monitoring\".\n\nParagraph 2:\nCO2 concentration reached 421 ppm on 2024-05-10 at Mauna Loa Observatory.\n\nParagraph 3:\nThey plan to double sensors within two years."
+    },
+    {
+      "id": "af-3",
+      "user": "Document to process.\n\nParagraph 1:\nThe trial was delayed until April 2022 because \"the court calendar was full\".\n\nParagraph 2:\nBetween 2018 and 2020, City X recorded 1,200–1,400 bicycle thefts annually.\n\nParagraph 3:\nIf rainfall exceeds 50 mm in 24 hours, the alert level becomes red."
+    }
+  ]
+}
+
+
