@@ -5,7 +5,7 @@
   "private": false,
   "license": "MIT",
   "bin": {
-    "gepa-spo": "./dist/cli.js"
+    "gepa-spo": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -29,7 +29,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution.git"
+    "url": "git+https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution.git"
   },
   "author": {
     "name": "BeMoreDifferent",
