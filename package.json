@@ -1,6 +1,6 @@
 {
   "name": "gepa-spo",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "private": false,
   "license": "MIT",
@@ -27,7 +27,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution.git"
+    "url": "https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution"
   },
   "bugs": {
     "url": "https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution/issues"
