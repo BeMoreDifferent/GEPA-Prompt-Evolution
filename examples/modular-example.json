@@ -1,0 +1,20 @@
+{
+  "system": "You are a helpful assistant.",
+  "prompts": [
+    {
+      "id": "1",
+      "user": "What is 2+2?",
+      "meta": { "expected": 4 }
+    },
+    {
+      "id": "2", 
+      "user": "Tell me a joke.",
+      "meta": { "type": "humor" }
+    },
+    {
+      "id": "3",
+      "user": "Explain quantum physics in simple terms.",
+      "meta": { "complexity": "high" }
+    }
+  ]
+}

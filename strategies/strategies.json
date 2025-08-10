@@ -4,140 +4,60 @@
         "hint": "Apply Pólya’s 4 steps: Understand, Plan, Execute, Reflect. Restate task, outline minimal plan, do it, then brief self-check."
     },
     {
-        "id": "fermi-estimate",
-        "hint": "When unknown quantities appear, use Fermi estimation: list assumptions, compute order-of-magnitude, provide range and key drivers."
-    },
-    {
-        "id": "dimensional-analysis",
-        "hint": "For numeric/physics problems, add unit sanity checks and dimensional analysis; show conversions; flag mismatches."
+        "id": "first-principles",
+        "hint": "Reduce to primitives; identify governing constraints; rebuild solution from basics; quantify assumptions."
     },
     {
         "id": "mece-structuring",
         "hint": "Organize content using MECE categories (mutually exclusive, collectively exhaustive); avoid overlap and cover the space."
     },
     {
-        "id": "smart-goals",
-        "hint": "When planning, translate into SMART objectives (Specific, Measurable, Achievable, Relevant, Time-bound) with brief metrics."
-    },
-    {
-        "id": "cpm-critical-path",
-        "hint": "For projects: list tasks, dependencies, durations; identify critical path; suggest fast-track options; note path risks."
-    },
-    {
-        "id": "raci-roles",
-        "hint": "If multiple stakeholders, add a tiny RACI: Responsible, Accountable, Consulted, Informed."
-    },
-    {
-        "id": "double-diamond",
-        "hint": "Use Double Diamond: Discover→Define→Develop→Deliver; note divergence vs convergence; propose a quick user test."
-    },
-    {
-        "id": "tdd-microcycle",
-        "hint": "Coding help uses TDD micro-cycles: specify a tiny test (in prose), implement minimally, then refactor note."
-    },
-    {
-        "id": "rubber-duck",
-        "hint": "If debugging, ask user to articulate steps precisely (rubber-duck); propose a reproducible test."
-    },
-    {
-        "id": "kano-prioritization",
-        "hint": "Prioritize features via Kano: Must-be, One-dimensional, Attractive, Indifferent; recommend sequencing."
-    },
-    {
         "id": "crisp-dm",
         "hint": "For data work, follow CRISP-DM: business understanding, data understanding, prep, modeling, evaluation, deployment."
     },
     {
-        "id": "bluf-writing",
-        "hint": "Lead with BLUF (Bottom Line Up Front), then compact rationale and next steps."
+        "id": "sixsigma-dmaic",
+        "hint": "Process improvement: Define→Measure→Analyze→Improve→Control; baseline KPIs, verify root causes, pilot fixes, lock in control plan."
     },
     {
-        "id": "risk-register",
-        "hint": "Include a tiny risk register: top 3 risks with probability/impact and a mitigation."
-    },
-    {
-        "id": "evidence-and-cite",
-        "hint": "Prefer verification and citations; mark time-sensitive claims; say 'unknown' rather than speculate."
-    },
-    {
-        "id": "json-contract",
-        "hint": "If structure is expected, return strict JSON schema and use 'unknown' for missing fields; no extra prose."
-    },
-    {
-        "id": "tool-first",
-        "hint": "Switch to tools/browsing when uncertainty is high; state what to verify and thresholds."
-    },
-    {
-        "id": "pareto-8020",
-        "hint": "Apply 80/20: identify few inputs that drive most outcomes; focus recommendations there."
-    },
-    {
-        "id": "checklist-safety",
-        "hint": "Insert a short safety/compliance checklist before risky actions; refuse minimally if unsafe."
-    },
-    {
-        "id": "design-critique",
-        "hint": "When giving designs, add quick critique: hierarchy, contrast, spacing, typography; suggest 2 iterations."
-    },
-    {
-        "id": "first-principles",
-        "hint": "Reduce to primitives; identify governing constraints; rebuild solution from basics; quantify assumptions."
-    },
-    {
-        "id": "triz-contradictions",
-        "hint": "Formulate technical contradiction; consult TRIZ principles/contradiction matrix for resolution patterns; propose 2–3 candidate transforms."
-    },
-    {
-        "id": "ooda-loop",
-        "hint": "For fast-changing/adversarial contexts, iterate OODA: Observe, Orient, Decide, Act; shorten loop via small probes; adapt on feedback."
+        "id": "lean-startup-bml",
+        "hint": "For product uncertainty, run Build–Measure–Learn loops; define MVP + falsifiable hypotheses; pivot/persevere based on evidence."
     },
     {
         "id": "cynefin-sensemaking",
         "hint": "Classify context (obvious/complicated/complex/chaotic); choose matching approach (best practice/expert analysis/safe‑to‑fail probes/act‑sense‑respond)."
     },
     {
-        "id": "toc-bottleneck",
-        "hint": "Identify system constraint; exploit, subordinate, elevate; repeat; optimise only at bottleneck."
-    },
-    {
-        "id": "rca-5whys-fishbone",
-        "hint": "Do root cause analysis: map causes via Ishikawa categories, then drive 5 Whys on the dominant branch; verify cause with a test."
-    },
-    {
-        "id": "premortem-redteam",
-        "hint": "Run premortem: assume failure, list reasons, rank by likelihood/impact; assign countermeasures; invite a red‑team critique."
-    },
-    {
-        "id": "mcda-ahp",
-        "hint": "When multiple criteria/stakeholders, use AHP: define hierarchy, pairwise compare, compute weights/consistency ratio, score options."
-    },
-    {
-        "id": "decision-tree-ev",
-        "hint": "Map decision tree; attach probabilities/payoffs; compute expected value/utility; choose max EV; consider EVPI to bound research value."
+        "id": "ooda-loop",
+        "hint": "For fast-changing/adversarial contexts, iterate OODA: Observe, Orient, Decide, Act; shorten loop via small probes; adapt on feedback."
     },
     {
         "id": "backcasting",
         "hint": "Start from desired end‑state; work backward to milestones, policy/tech enablers; derive near‑term actions."
     },
     {
+        "id": "kepner-tregoe",
+        "hint": "Structured analysis: Situation Appraisal → Problem Analysis (Is/Is‑Not) → Decision Analysis (criteria/weights/risks) → Potential Problem Analysis."
+    },
+    {
+        "id": "decision-tree-ev",
+        "hint": "Map decision tree; attach probabilities/payoffs; compute expected value/utility; choose max EV; consider EVPI to bound research value."
+    },
+    {
+        "id": "mcda-ahp",
+        "hint": "When multiple criteria/stakeholders, use AHP: define hierarchy, pairwise compare, compute weights/consistency ratio, score options."
+    },
+    {
+        "id": "value-of-information",
+        "hint": "Compute EVPI/EVSI to decide if more data is worth it; if value < cost/time, proceed without further research."
+    },
+    {
+        "id": "bayesian-updating",
+        "hint": "Quantify belief and act under uncertainty: set prior, define likelihoods, compute posterior; act when posterior crosses decision threshold."
+    },
+    {
         "id": "systems-cld",
         "hint": "Sketch causal loop diagram; identify reinforcing/balancing loops; locate leverage points; design interventions."
-    },
-    {
-        "id": "dp-optimal-substructure",
-        "hint": "If overlapping subproblems/optimal substructure, define recurrence, memoize/tabulate; verify correctness by induction."
-    },
-    {
-        "id": "invariants-induction",
-        "hint": "Prove or design via invariants/monovariants; state invariant, base case, preservation, termination; use for algorithm or safety proofs."
-    },
-    {
-        "id": "branch-and-bound",
-        "hint": "For combinatorial search, define bounds and branching; prune dominated regions; record incumbent; stop on proof of optimality."
-    },
-    {
-        "id": "fmea",
-        "hint": "Before launch, list failure modes/effects; rate severity, occurrence, detection; compute risk priority number; mitigate top items."
     },
     {
         "id": "design-of-experiments",
@@ -152,31 +72,59 @@
         "hint": "Test model robustness: OAT/local; global (Sobol/variance-based); report most influential inputs."
     },
     {
-        "id": "value-of-information",
-        "hint": "Compute EVPI/EVSI to decide if more data is worth it; if value < cost/time, proceed without further research."
+        "id": "fermi-estimate",
+        "hint": "When unknown quantities appear, use Fermi estimation: list assumptions, compute order‑of‑magnitude, provide range and key drivers."
+    },
+    {
+        "id": "dimensional-analysis",
+        "hint": "For numeric/physics problems, add unit sanity checks and dimensional analysis; show conversions; flag mismatches."
+    },
+    {
+        "id": "dp-optimal-substructure",
+        "hint": "If overlapping subproblems/optimal substructure, define recurrence, memoize/tabulate; verify correctness by induction."
+    },
+    {
+        "id": "branch-and-bound",
+        "hint": "For combinatorial search, define bounds and branching; prune dominated regions; record incumbent; stop on proof of optimality."
+    },
+    {
+        "id": "tdd-microcycle",
+        "hint": "Coding help uses TDD micro-cycles: specify a tiny test (in prose), implement minimally, then refactor note."
+    },
+    {
+        "id": "mape-k-control-loop",
+        "hint": "For operational systems, set up MAPE‑K loop: Monitor→Analyze→Plan→Execute on Knowledge; define SLOs and automated actions."
+    },
+    {
+        "id": "triage-scarcity",
+        "hint": "When resources are scarce, triage by urgency/benefit (e.g., SALT): address ‘Immediate’ first; defer lower‑benefit cases."
+    },
+    {
+        "id": "swiss-cheese",
+        "hint": "Model layered defenses; find where ‘holes’ align; add/strengthen barriers and monitors to break accident trajectories."
+    },
+    {
+        "id": "heuristic-evaluation-nielsen10",
+        "hint": "For UX quality, run Nielsen’s 10 heuristics; log issues with severity (0–4) and quick fixes; tackle high‑severity first."
     },
     {
         "id": "causal-dag",
         "hint": "Draw DAG; identify confounders; apply backdoor/frontdoor criteria; specify causal estimand; avoid conditioning on colliders."
     },
     {
-        "id": "lean-startup-bml",
-        "hint": "For product uncertainty, run Build–Measure–Learn loops; define MVP + falsifiable hypotheses; pivot/persevere based on evidence."
+        "id": "com-b",
+        "hint": "Design behavior change by mapping Capability, Opportunity, Motivation → Behavior; pick matching interventions (training, prompts, incentives, environment)."
     },
     {
-        "id": "jobs-to-be-done",
-        "hint": "Define user job, context, struggles; design solution to be ‘hired’ for that job; validate with outcome statements."
+        "id": "principled-negotiation",
+        "hint": "Harvard method: separate people from problem, focus on interests, invent options, insist on objective criteria; know and improve BATNA."
     },
     {
-        "id": "property-based-testing",
-        "hint": "For code, specify properties/invariants; auto-generate diverse cases incl. edge; shrink counterexamples."
+        "id": "proportionality-test",
+        "hint": "Before intrusive actions: test suitability, necessity, and proportionality (narrow balancing). Document why benefits justify burdens."
     },
     {
-        "id": "mape-k-control-loop",
-        "hint": "For operational systems, set up MAPE-K loop: Monitor→Analyze→Plan→Execute on Knowledge; define SLOs and automated actions."
-    },
-    {
-        "id": "lagrangian-relaxation",
-        "hint": "If constraints complicate optimization, relax with multipliers to get tractable subproblem; use dual bounds; iterate on multipliers."
+        "id": "toc-bottleneck",
+        "hint": "Identify system constraint; exploit, subordinate, elevate; repeat; optimise only at bottleneck."
     }
 ]

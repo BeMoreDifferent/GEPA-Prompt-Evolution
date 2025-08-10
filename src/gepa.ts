@@ -1,5 +1,5 @@
 import { selectCandidate } from './selection.js';
-import { proposeNewSystem, type JudgedExample } from './reflection.js';
+import { proposeNewSystem, proposeNewModule, type JudgedExample } from './reflection.js';
 import { UCB1 } from './bandit.js';
 import { seedPopulation, type StrategyDef } from './seeding.js';
 import type {
@@ -11,6 +11,14 @@ import { prefilterStrategies } from './strategy.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BudgetTracker } from './budget.js';
+import { 
+  isModular, 
+  isSingleSystem, 
+  getModuleCount, 
+  serializeCandidate, 
+  deserializeCandidate,
+  validateCandidate 
+} from './modules.js';
 
 type PersistHook = (state: GEPAState, iterPayload: Record<string, unknown>) => Promise<void>;
 
@@ -47,19 +55,24 @@ export async function runGEPA_System(
   const startBudget = persist?.state?.budgetLeft ?? budget;
   const budgetTracker = new BudgetTracker(startBudget, true);
 
+  // Validate seed candidate
+  validateCandidate(seed);
+
   // ---- resume or fresh ----
   let state: GEPAState = persist?.state ?? {
     version: 2,
     budgetLeft: budget,
     iter: 0,
-    Psystems: [seed.system],
+    Psystems: [serializeCandidate(seed)],
     S: [],
     DparetoIdx: [],
     DfbIdx: [],
     DholdIdx: [],
     bestIdx: 0,
     seeded: false,
-    bandit: null
+    bandit: null,
+    moduleIndex: 0,
+    moduleCount: getModuleCount(seed)
   };
 
   // Split once, then store indices for determinism across resumes
@@ -87,7 +100,7 @@ export async function runGEPA_System(
   }
 
   // Rebuild P and S
-  const P: Candidate[] = state.Psystems.map(s => ({ system: s }));
+  const P: Candidate[] = state.Psystems.map(s => deserializeCandidate(s));
   const S: number[][] = state.S.length ? state.S : (state.S = []);
 
   // Helper to compute a Pareto row using configured scorer
@@ -195,9 +208,9 @@ export async function runGEPA_System(
     if (seeded.usedCalls > 0) budgetTracker.dec(seeded.usedCalls, 'seeding');
     state.budgetLeft = budgetTracker.remaining();
     for (const c of seeded.candidates.slice(1)) {
-      P.push({ system: c.system });
-      state.Psystems.push(c.system);
-      const row = await scoreParetoRow({ system: c.system });
+      P.push(c);
+      state.Psystems.push(serializeCandidate(c));
+      const row = await scoreParetoRow(c);
       S.push(row);
     }
     state.bestIdx = argmax(S.map(r => avg(r)));
@@ -262,10 +275,22 @@ export async function runGEPA_System(
       feedback: x.feedback
     }));
     if (!budgetTracker.canAfford(1)) break;
-    const newSystem = await proposeNewSystem(llm, parent.system, examples, hint);
+    
+    // Round-robin module mutation
+    const moduleIndex = state.moduleIndex ?? 0;
+    const moduleCount = state.moduleCount ?? getModuleCount(parent);
+    
+    logger.info(`Mutating module ${moduleIndex + 1}/${moduleCount}`);
+    
+    const child = await proposeNewModule(llm, parent, moduleIndex, examples, hint);
     budgetTracker.dec(1, 'propose');
-    logger.debug(`New system preview: ${(newSystem || '').slice(0, 120)}`);
-    const child: Candidate = { system: newSystem };
+    
+    // Update module index for next iteration (round-robin)
+    state.moduleIndex = (moduleIndex + 1) % moduleCount;
+    
+    const systemPreview = isSingleSystem(child) ? child.system : 
+                         isModular(child) ? child.modules.map(m => m.prompt).join('\n\n') : '';
+    logger.debug(`New system preview: ${(systemPreview || '').slice(0, 120)}`);
 
     // Re-evaluate on same minibatch
     const afterScores: number[] = [];
@@ -319,13 +344,13 @@ export async function runGEPA_System(
       accepted: sigmaP > sigma && passHold,
       // persist minimal structured debug info (bounded size)
       before: before.map(x => ({ id: x.id, score: x.score, feedback: x.feedback.slice(0, 500) })),
-      proposedSystem: (newSystem || '').slice(0, 2000)
+      proposedSystem: (systemPreview || '').slice(0, 2000)
     };
 
     // Accept child → score on Pareto set
     if (iterPayload.accepted) {
       P.push(child);
-      state.Psystems.push(child.system);
+      state.Psystems.push(serializeCandidate(child));
       const row = await scoreParetoRow(child);
       S.push(row);
       state.S = S;

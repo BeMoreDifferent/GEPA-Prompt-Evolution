@@ -64,13 +64,15 @@ async function main(): Promise<void> {
 
     // executor (actor)
     const execute: GepaOptions['execute'] = async ({ candidate, item }) => {
+      // Concatenate modules for backward compatibility
+      const systemPrompt = candidate.system || (candidate.modules ? candidate.modules.map(m => m.prompt).join('\n\n') : '');
       const prompt = [
-        'SYSTEM:\n' + candidate.system,
+        'SYSTEM:\n' + systemPrompt,
         'USER:\n' + item.user,
         'ASSISTANT:'
       ].join('\n\n');
       const content = await actorLLM.complete(prompt);
-      return { output: content, traces: { system: candidate.system } };
+      return { output: content, traces: { system: systemPrompt } };
     };
 
     // metrics (judge)

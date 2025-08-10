@@ -1,8 +1,17 @@
 /* Strict domain types for the optimizer */
 
+export interface Module {
+  /** Unique identifier for the module */
+  id: string;
+  /** System prompt for this module */
+  prompt: string;
+}
+
 export interface Candidate {
-  /** Current system prompt under evaluation */
-  system: string;
+  /** Current system prompt under evaluation (backward compatible) */
+  system?: string;
+  /** Modular system with multiple modules */
+  modules?: Module[];
 }
 
 export interface TaskItem {
@@ -84,7 +93,7 @@ export interface GEPAState {
   version: 2;
   budgetLeft: number;
   iter: number;
-  Psystems: string[];     // candidates pool (system prompts)
+  Psystems: string[];     // candidates pool (system prompts) - backward compatible
   S: number[][];          // Pareto scores: S[k][i]
   DparetoIdx: number[];
   DfbIdx: number[];
@@ -92,6 +101,10 @@ export interface GEPAState {
   bestIdx: number;
   seeded: boolean;
   bandit: Ucb1State | null;
+  /** Current module index for round-robin mutation (0-based) */
+  moduleIndex?: number;
+  /** Number of modules in the system (for round-robin scheduling) */
+  moduleCount?: number;
 }
 
 /**
