@@ -106,7 +106,8 @@ async function main(): Promise<void> {
       paretoSize: Number(config['paretoSize'] ?? Math.max(4, Math.floor(dtrain.length / 5))),
       holdoutSize: Number(config['holdoutSize'] ?? 0),
       epsilonHoldout: Number(config['epsilonHoldout'] ?? 0.02),
-      ...(config['strategiesPath'] ? { strategiesPath: String(config['strategiesPath']) } : { strategiesPath: DEFAULT_STRATEGIES_PATH })
+      ...(config['strategiesPath'] ? { strategiesPath: String(config['strategiesPath']) } : { strategiesPath: DEFAULT_STRATEGIES_PATH }),
+      ...(config['scoreForPareto'] === 'mu' ? { scoreForPareto: 'mu' as const } : { scoreForPareto: 'muf' as const })
     }, { state: (runCtx as any).state, onCheckpoint, logger });
 
     // Print final best to stdout
