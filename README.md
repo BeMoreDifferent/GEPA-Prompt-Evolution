@@ -4,7 +4,8 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
 
-> **Genetic-Pareto prompt optimizer** to evolve system prompts from a few rollouts. GEPA performs natural-language reflection over full trajectories, mutates prompts with multiple strategies, and maintains a Pareto frontier rather than collapsing to a single candidate.
+> **Genetic-Pareto prompt optimizer** to evolve system prompts from a few rollouts. GEPA performs natural-language reflection over full trajectories, mutates prompts with multiple strategies, and maintains a Pareto frontier rather than collapsing to a single candidate.**This is NOT the official GEPA implementation.** 
+
 
 ## 🚀 Quick Start
 

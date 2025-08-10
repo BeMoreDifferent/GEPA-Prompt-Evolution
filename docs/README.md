@@ -2,6 +2,17 @@
 
 Welcome to the comprehensive documentation for GEPA (Genetic-Pareto) Prompt Evolution. This documentation covers all aspects of the GEPA system, from basic usage to advanced features and technical implementation.
 
+## ⚠️ Important Notice
+
+**This is NOT the official GEPA implementation.** This is an independent, open-source implementation of the GEPA (Genetic-Pareto) algorithm based on the research paper. The official implementation may be available from the original authors.
+
+- **Research Paper**: This implementation is based on the GEPA research methodology
+- **Independent Development**: Created as an open-source alternative
+- **Community Contribution**: Developed to make GEPA accessible to the broader AI community
+- **No Official Affiliation**: Not affiliated with or endorsed by the original research authors
+
+For the official implementation or to cite the original research, please refer to the academic paper and contact the original authors.
+
 ## 📚 Documentation Index
 
 ### 🚀 Getting Started
