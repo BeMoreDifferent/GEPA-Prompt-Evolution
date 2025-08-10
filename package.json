@@ -2,7 +2,7 @@
   "name": "gepa-spo",
   "version": "0.3.0",
   "type": "module",
-  "private": true,
+  "private": false,
   "license": "MIT",
   "bin": { "gepa-spo": "./dist/cli.js" },
   "scripts": {
@@ -10,11 +10,29 @@
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/cli.js",
-    "demo:min": "node dist/cli.js --runs-root ./runs-test/demo --input ./examples/input.min.prompts.json --config ./examples/config.min.json"
+    "demo:min": "node dist/cli.js --runs-root ./runs-test/demo --input ./examples/input.min.prompts.json --config ./examples/config.min.json",
+    "prepublishOnly": "pnpm typecheck && pnpm test && pnpm build"
   },
   "engines": {
     "node": ">=18"
   },
+  "files": [
+    "dist",
+    "strategies",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/daniel/GEPA-Prompt-Evolution.git"
+  },
+  "bugs": {
+    "url": "https://github.com/daniel/GEPA-Prompt-Evolution/issues"
+  },
+  "homepage": "https://github.com/daniel/GEPA-Prompt-Evolution#readme",
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "^22.5.0",

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import * as fs from 'node:fs/promises';
-import { runGEPA_System } from './gepa.js';
+import { runGEPA_System, DEFAULT_STRATEGIES_PATH } from './gepa.js';
 import { makeOpenAIClients } from './llm_openai.js';
 import { judgeScore } from './judge.js';
 import { initRun, resumeRun, acquireLock, saveIteration, saveState, writeJsonAtomic } from './persist.js';
@@ -106,7 +106,7 @@ async function main(): Promise<void> {
       paretoSize: Number(config['paretoSize'] ?? Math.max(4, Math.floor(dtrain.length / 5))),
       holdoutSize: Number(config['holdoutSize'] ?? 0),
       epsilonHoldout: Number(config['epsilonHoldout'] ?? 0.02),
-      strategiesPath: String(config['strategiesPath'] ?? 'strategies/strategies.json')
+      ...(config['strategiesPath'] ? { strategiesPath: String(config['strategiesPath']) } : { strategiesPath: DEFAULT_STRATEGIES_PATH })
     }, { state: (runCtx as any).state, onCheckpoint, logger });
 
     // Print final best to stdout

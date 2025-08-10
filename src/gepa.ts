@@ -8,6 +8,8 @@ import type {
 import * as fs from 'node:fs/promises';
 import { type Logger, silentLogger } from './logger.js';
 import { prefilterStrategies } from './strategy.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 type PersistHook = (state: GEPAState, iterPayload: Record<string, unknown>) => Promise<void>;
 
@@ -16,6 +18,12 @@ export interface RunPersist {
   onCheckpoint?: PersistHook;
   logger?: Logger;
 }
+
+// Default built-in strategies file packaged with the module (dist is sibling to strategies)
+export const DEFAULT_STRATEGIES_PATH: string = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../strategies/strategies.json'
+);
 
 /** Optimize a single system prompt with GEPA + strategy bandit + holdout gates. */
 export async function runGEPA_System(
@@ -27,7 +35,7 @@ export async function runGEPA_System(
   const {
     execute, mu, muf, llm,
     budget, minibatchSize: b, paretoSize: nPareto,
-    holdoutSize = 0, epsilonHoldout = 0.02, strategiesPath = 'strategies/strategies.json'
+    holdoutSize = 0, epsilonHoldout = 0.02, strategiesPath = DEFAULT_STRATEGIES_PATH
   } = opts;
   const logger: Logger = persist?.logger ?? silentLogger;
   logger.step('GEPA start', `budget=${budget}, pareto=${nPareto}, minibatch=${b}`);
