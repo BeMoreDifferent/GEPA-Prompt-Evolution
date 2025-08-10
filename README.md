@@ -12,28 +12,63 @@
 # Set your OpenAI API key
 export OPENAI_API_KEY="your-api-key-here"
 
-# Run optimization (no installation required)
+# Run optimization with detailed logging
 npx gepa-spo \
-  --runs-root ./runs \
   --input ./examples/input.prompts.json \
   --config ./examples/config.json \
   --log
 ```
 
 **What you get:**
-- ✅ **CLI Tool**: Optimize prompts from JSON inputs
-- ✅ **Modular Systems**: Support for multi-component prompts
+- ✅ **CLI Tool**: Optimize prompts from JSON inputs with detailed statistics
+- ✅ **Modular Systems**: Support for multi-component prompts with intelligent crossover
 - ✅ **Core API**: TypeScript library for custom integrations
 - ✅ **Persistence**: Resume interrupted runs, export best prompts
 - ✅ **Strategy Bandit**: Adaptive strategy selection via UCB1
+- ✅ **Enhanced Logging**: Comprehensive performance tracking and percentage improvements
 
 ## 📖 Documentation
 
-- **[CLI Documentation](CLI_DOCUMENTATION.md)** - Complete CLI reference and usage guide
-- **[Module System Documentation](MODULE_DOCUMENTATION.md)** - Modular prompt optimization features
-- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute to the project
+📚 **[Complete Documentation](docs/README.md)** - Comprehensive guides and references
+
+### 🚀 Getting Started
+- **[Quick Start Guide](docs/getting-started/quick-start.md)** - Get up and running in minutes
+- **[Basic Concepts](docs/getting-started/concepts.md)** - Understanding GEPA fundamentals
+
+### 📖 User Guides
+- **[CLI Reference](docs/user-guides/cli-reference.md)** - Complete command-line interface documentation
+- **[Modular Systems](docs/user-guides/modular-systems.md)** - Multi-component prompt optimization
+- **[Configuration Guide](docs/user-guides/configuration.md)** - All configuration options and settings
+
+### 🔧 Developer Guides
+- **[API Reference](docs/developer-guides/api-reference.md)** - Programmatic API documentation
+- **[TypeScript Types](docs/developer-guides/types.md)** - Complete type definitions
+
+### 🔬 Technical Documentation
+- **[GEPA Algorithm](docs/technical/algorithm.md)** - Detailed algorithm explanation
+- **[Research Background](docs/technical/research.md)** - Academic background and methodology
 
 ## 🎯 Key Features
+
+### 📊 Enhanced Logging & Statistics
+When `--log` is enabled, GEPA provides comprehensive performance tracking:
+
+```
+📊 PERFORMANCE STATISTICS
+├─ Initial Score: 0.523
+├─ Final Score: 0.789
+├─ Absolute Improvement: 0.266
+├─ Percentage Improvement: 50.9%
+├─ Iterations Completed: 15
+├─ Candidates Generated: 18
+├─ Candidates Accepted: 12 (66.7%)
+├─ Crossover Operations: 4 (22.2%)
+├─ Mutation Operations: 8
+├─ Strategy Switches: 2
+├─ Budget Used: 85/100 (85.0%)
+├─ Data Split: Pareto=5, Feedback=10, Holdout=2
+└─ Efficiency: 0.0093 score per budget unit
+```
 
 ### Single-System Optimization
 ```json
@@ -64,6 +99,7 @@ npx gepa-spo \
 - **Trace-aware reflection** with execution context
 - **Holdout gating** to prevent overfitting
 - **Strategy bandit** for adaptive optimization
+- **Detailed performance tracking** with percentage improvements
 
 ## 🔧 Installation
 
@@ -93,27 +129,26 @@ node dist/cli.js --help
 
 ## 🛠️ Usage Examples
 
-### Basic Optimization
+### Basic Optimization with Logging
 ```bash
 npx gepa-spo \
-  --runs-root ./my-runs \
   --input ./examples/input.prompts.json \
   --config ./examples/config.json \
   --log
 ```
 
-### Modular System
+### Modular System with Debug Logging
 ```bash
 npx gepa-spo \
-  --runs-root ./modular-runs \
   --input ./examples/input.modules.json \
   --config ./examples/config.modular.json \
-  --log
+  --log \
+  --log-level debug
 ```
 
 ### Resume Interrupted Run
 ```bash
-npx gepa-spo --resume ./my-runs/2024-01-15T10-30-45Z-demo-abc123
+npx gepa-spo --resume ./runs/2024-01-15T10-30-45Z-demo-abc123
 ```
 
 ### Save Best Prompt
@@ -121,7 +156,8 @@ npx gepa-spo --resume ./my-runs/2024-01-15T10-30-45Z-demo-abc123
 npx gepa-spo \
   --input ./input.json \
   --config ./config.json \
-  --out ./best-prompt.txt
+  --out ./best-prompt.txt \
+  --log
 ```
 
 ## ⚙️ Configuration
@@ -134,17 +170,19 @@ npx gepa-spo \
   "budget": 100,
   "minibatchSize": 4,
   "paretoSize": 8,
-  "crossoverProb": 0.2
+  "crossoverProb": 0.2,
+  "rubric": "Correctness, clarity, and conciseness."
 }
 ```
 
 ### Key Settings
-- **`budget`**: Total LLM calls for optimization
-- **`minibatchSize`**: Items evaluated per iteration
-- **`paretoSize`**: Items for multi-objective tracking
+- **`budget`**: Total LLM calls for optimization (50-200 recommended)
+- **`minibatchSize`**: Items evaluated per iteration (2-6)
+- **`paretoSize`**: Items for multi-objective tracking (2-12)
 - **`crossoverProb`**: Probability of crossover vs mutation [0,1]
+- **`rubric`**: Evaluation criteria for optimization
 
-See [CLI Documentation](CLI_DOCUMENTATION.md) for complete configuration options.
+See [Configuration Guide](docs/user-guides/configuration.md) for complete options.
 
 ## 🔌 Programmatic API
 
@@ -186,7 +224,6 @@ pnpm build
 
 # End-to-end smoke test
 pnpm build && node dist/cli.js \
-  --runs-root ./runs-test/demo \
   --input ./examples/input.min.prompts.json \
   --config ./examples/config.min.json \
   --log
@@ -200,14 +237,20 @@ GEPA-Prompt-Evolution/
 ├── tests/                  # Test suite
 ├── examples/               # Example configs and inputs
 ├── strategies/             # Strategy hints for optimization
-├── CLI_DOCUMENTATION.md    # Complete CLI reference
-├── MODULE_DOCUMENTATION.md # Modular system guide
+├── docs/                   # 📚 Comprehensive documentation
+│   ├── getting-started/    # New user guides
+│   ├── user-guides/        # User documentation
+│   ├── developer-guides/   # Developer documentation
+│   ├── technical/          # Technical documentation
+│   └── reference/          # Reference materials
+├── CLI_DOCUMENTATION.md    # Legacy CLI reference
+├── MODULE_DOCUMENTATION.md # Legacy module guide
 └── CONTRIBUTING.md         # Contribution guidelines
 ```
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+We welcome contributions! Please see [Contributing Guide](docs/reference/contributing.md) for details.
 
 **Quick start for contributors:**
 1. Fork the repository
@@ -228,13 +271,14 @@ GEPA (Genetic-Pareto) is a prompt optimization method that:
 - Achieves sample-efficient adaptation with up to 35× fewer rollouts
 - Outperforms GRPO by ~10% on average and MIPROv2 by >10%
 
-For detailed technical information, see the [AI instructions](ai/instructions.md).
+For detailed technical information, see the [AI instructions](ai/instructions.md) and [Technical Documentation](docs/technical/algorithm.md).
 
 ## 🆘 Support
 
-- **Documentation**: [CLI Guide](CLI_DOCUMENTATION.md) | [Module Guide](MODULE_DOCUMENTATION.md)
+- **Documentation**: [Complete Documentation](docs/README.md)
 - **Issues**: [GitHub Issues](https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution/issues)
 - **Examples**: Check the `examples/` directory for working configurations
+- **FAQ**: [Frequently Asked Questions](docs/reference/faq.md)
 
 ---
 
