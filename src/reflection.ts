@@ -32,8 +32,10 @@ export async function proposeNewSystem(
   strategyHint?: string
 ): Promise<string> {
   const raw = await llm.complete(buildReflectionPrompt(system, examples, strategyHint ?? ''));
-  const m = raw.match(/'''([\s\S]*?)'''/);
-  return (m ? m[1] : raw).trim();
+  // Accept both triple single or double quotes, and optional [new system prompt] tag
+  const m = raw.match(/(['"])['\"]{2}([\s\S]*?)\1{2}|'''([\s\S]*?)'''|"""([\s\S]*?)"""/);
+  const body = (m?.[2] ?? m?.[3] ?? m?.[4] ?? raw).trim();
+  return body.replace(/^\[new system prompt\]\s*/i, '').trim();
 }
 
 

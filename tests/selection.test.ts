@@ -17,7 +17,7 @@ describe('selectCandidate', () => {
     const P = [{ system: 'a' }];
     const S: number[][] = [[]];
     const k = selectCandidate(P, S);
-    expect([0, undefined]).toContain(k);
+    expect(k).toBeGreaterThanOrEqual(0);
   });
 });
 

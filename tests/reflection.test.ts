@@ -21,6 +21,12 @@ describe('proposeNewSystem', () => {
     const out = await proposeNewSystem(llm as any, 'seed', [], '');
     expect(out).toBe('raw');
   });
+
+  test('accepts triple double quotes and strips tag', async () => {
+    const llm = { complete: async () => '"""\n[new system prompt]\nHello\n"""' };
+    const out = await proposeNewSystem(llm as any, 'seed', [], '');
+    expect(out).toBe('Hello');
+  });
 });
 
 

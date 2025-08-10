@@ -20,6 +20,13 @@ describe('judgeScore', () => {
     const j = await judgeScore(chat as any, 'r', 's', 'u', 'a');
     expect(j.score).toBe(0);
   });
+
+  test('clamps out-of-range scores and defaults feedback', async () => {
+    const chat = { chat: async () => JSON.stringify({ score: 99, something: true }) };
+    const j = await judgeScore(chat as any, 'r', 's', 'u', 'a');
+    expect(j.score).toBe(1);
+    expect(typeof j.feedback).toBe('string');
+  });
 });
 
 

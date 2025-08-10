@@ -13,7 +13,8 @@ describe('seedPopulation', () => {
             muf: muf,
             llm: llm
         });
-        expect(res.length).toBeGreaterThanOrEqual(1);
-        expect(res[0]).toHaveProperty('system');
+        expect(res.candidates.length).toBeGreaterThanOrEqual(1);
+        expect(res.candidates[0]).toHaveProperty('system');
+        expect(res.usedCalls).toBeGreaterThanOrEqual(1);
     });
 });

@@ -3,10 +3,11 @@ import { proposeNewSystem, type JudgedExample } from './reflection.js';
 import { UCB1 } from './bandit.js';
 import { seedPopulation, type StrategyDef } from './seeding.js';
 import type {
-  Candidate, TaskItem, GepaOptions, GEPAState
+  Candidate, TaskItem, GepaOptions, GEPAState, StrategyScheduleOptions
 } from './types.js';
 import * as fs from 'node:fs/promises';
 import { type Logger, silentLogger } from './logger.js';
+import { prefilterStrategies } from './strategy.js';
 
 type PersistHook = (state: GEPAState, iterPayload: Record<string, unknown>) => Promise<void>;
 
@@ -50,16 +51,25 @@ export async function runGEPA_System(
   if (state.DparetoIdx.length === 0 && state.DfbIdx.length === 0) {
     const idx = [...dtrain.keys()];
     for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
-    const hold = Math.min(holdoutSize, Math.max(0, Math.floor(idx.length * 0.1)));
-    state.DparetoIdx = idx.slice(0, nPareto);
-    state.DholdIdx   = idx.slice(nPareto, nPareto + hold);
-    state.DfbIdx     = idx.slice(nPareto + hold);
+    // Ensure at least one feedback item when possible
+    const total = idx.length;
+    const paretoEff = Math.min(nPareto, Math.max(1, total > 1 ? total - 1 : total));
+    const holdMax = Math.max(0, total - paretoEff - 1);
+    const holdEff = Math.min(holdoutSize, holdMax);
+    state.DparetoIdx = idx.slice(0, paretoEff);
+    state.DholdIdx   = idx.slice(paretoEff, paretoEff + holdEff);
+    state.DfbIdx     = idx.slice(paretoEff + holdEff);
     state.budgetLeft = state.budgetLeft || budget;
   }
   const Dpareto = state.DparetoIdx.map(i => dtrain[i]);
   const Dhold   = state.DholdIdx.map(i => dtrain[i]);
-  const Dfb     = state.DfbIdx.map(i => dtrain[i]);
+  let   Dfb     = state.DfbIdx.map(i => dtrain[i]);
   logger.info(`Split: pareto=${Dpareto.length}, holdout=${Dhold.length}, feedback=${Dfb.length}`);
+  if (Dfb.length === 0 && Dpareto.length > 0) {
+    // Fallback: reuse Pareto items as feedback for tiny datasets
+    Dfb = [...Dpareto];
+    logger.warn('Feedback set empty; falling back to use Pareto items for minibatches');
+  }
 
   // Rebuild P and S
   const P: Candidate[] = state.Psystems.map(s => ({ system: s }));
@@ -69,25 +79,90 @@ export async function runGEPA_System(
   if (S.length === 0) {
     logger.step('Init Pareto row', `k=0 over ${Dpareto.length} items`);
     const row = await Promise.all(Dpareto.map(async (item) => {
-      const { output } = await execute({ candidate: P[0], item });
-      return mu(output, item.meta ?? null);
+      const { output, traces } = await execute({ candidate: P[0], item });
+      const f = await opts.muf({ item, output, traces: traces ?? null });
+      return f.score;
     }));
     S.push(row);
   }
 
   // Strategies + bandit
-  const strategies: StrategyDef[] = JSON.parse(await fs.readFile(strategiesPath, 'utf8')) as StrategyDef[];
-  let bandit = state.bandit ? UCB1.from(state.bandit) : new UCB1(strategies.map(s => s.id));
+  const strategiesRaw: StrategyDef[] = JSON.parse(await fs.readFile(strategiesPath, 'utf8')) as StrategyDef[];
+  let activeStrategies: StrategyDef[] = [...strategiesRaw];
+  let bandit = state.bandit ? UCB1.from(state.bandit) : new UCB1(activeStrategies.map(s => s.id));
+
+  // Adaptive scheduler state
+  const scheduleOpts: Required<StrategyScheduleOptions> = {
+    windowSize: opts.strategySchedule?.windowSize ?? 8,
+    slowdownThreshold: opts.strategySchedule?.slowdownThreshold ?? 0.01,
+    baseExploreProb: opts.strategySchedule?.baseExploreProb ?? 0.1,
+    maxExploreProb: opts.strategySchedule?.maxExploreProb ?? 0.6,
+    baseNoHintProb: opts.strategySchedule?.baseNoHintProb ?? 0.15,
+    maxNoHintProb: opts.strategySchedule?.maxNoHintProb ?? 0.4,
+    defaultCoreTopK: opts.strategySchedule?.defaultCoreTopK ?? 6,
+    prefilterThreshold: opts.strategySchedule?.prefilterThreshold ?? 0.3,
+    prefilterTopK: opts.strategySchedule?.prefilterTopK ?? 10,
+    reprefilterCooldownIters: opts.strategySchedule?.reprefilterCooldownIters ?? 6
+  };
+  const upliftWindow: number[] = [];
+  const pushUplift = (u: number) => {
+    upliftWindow.push(u);
+    if (upliftWindow.length > scheduleOpts.windowSize) upliftWindow.shift();
+  };
+  const recentAvgUplift = (): number => upliftWindow.length ? upliftWindow.reduce((a, b) => a + b, 0) / upliftWindow.length : 0;
+  const calcExploreProb = (): number => {
+    const avgU = recentAvgUplift();
+    if (avgU <= scheduleOpts.slowdownThreshold) return scheduleOpts.maxExploreProb;
+    // Linearly interpolate between base and max around threshold -> generous exploration as gains slow
+    const ratio = Math.max(0, Math.min(1, (scheduleOpts.slowdownThreshold / avgU)));
+    return Math.min(scheduleOpts.maxExploreProb, scheduleOpts.baseExploreProb + (scheduleOpts.maxExploreProb - scheduleOpts.baseExploreProb) * ratio);
+  };
+  const calcNoHintProb = (): number => {
+    const avgU = recentAvgUplift();
+    if (avgU <= scheduleOpts.slowdownThreshold) return scheduleOpts.maxNoHintProb;
+    const ratio = Math.max(0, Math.min(1, (scheduleOpts.slowdownThreshold / avgU)));
+    return Math.min(scheduleOpts.maxNoHintProb, scheduleOpts.baseNoHintProb + (scheduleOpts.maxNoHintProb - scheduleOpts.baseNoHintProb) * ratio);
+  };
+
+  // Prefilter strategies initially against the training corpus preview
+  const prefilterCfg = {
+    threshold: opts.strategySchedule?.prefilterThreshold ?? 0.3,
+    topK: opts.strategySchedule?.prefilterTopK ?? 10
+  };
+  const previewTexts = Dpareto.concat(Dfb).slice(0, 12).map(x => x.user);
+  if (previewTexts.length > 0 && strategiesRaw.length > 0) {
+    try {
+      const pf = await prefilterStrategies(llm, strategiesRaw as any, previewTexts, prefilterCfg);
+      if (pf.kept.length > 0) {
+        activeStrategies = pf.kept as StrategyDef[];
+        bandit = new UCB1(activeStrategies.map(s => s.id));
+        logger.info(`Prefiltered strategies: kept=${activeStrategies.length}/${strategiesRaw.length}`);
+      }
+    } catch (e) {
+      logger.warn(`Prefilter failed; using all strategies (${(e as Error).message})`);
+      activeStrategies = [...strategiesRaw];
+    }
+  }
+
+  // Re-prefilter trigger when stagnating for N iterations
+  let lastPrefilterIter = 0;
+  const reprefilterCooldown = opts.strategySchedule?.reprefilterCooldownIters ?? 6;
 
   // One-time seeding with top-K strategies (screen subset of feedback set)
   if (!state.seeded && Dfb.length) {
     logger.step('Seeding population');
     const screen = Dfb.slice(0, Math.max(3, Math.floor(Dfb.length * 0.1)));
+    // Reserve budget for at least one full iteration (before+after judge calls)
+    const reserveCalls = Math.max(3, 2 * b);
+    const allowedForSeeding = state.budgetLeft > reserveCalls ? (state.budgetLeft - reserveCalls) : 0;
     const seeded = await seedPopulation({
-      seed: { system: state.Psystems[0] }, screen, strategies,
-      K: Math.min(6, strategies.length), execute, muf, llm
+      seed: { system: state.Psystems[0] }, screen, strategies: activeStrategies,
+      K: Math.min(6, activeStrategies.length), execute, muf, llm,
+      budgetLeft: allowedForSeeding
     });
-    for (const c of seeded.slice(1)) {
+    // Precisely decrement by measured usedCalls
+    state.budgetLeft = Math.max(0, state.budgetLeft - seeded.usedCalls);
+    for (const c of seeded.candidates.slice(1)) {
       P.push({ system: c.system });
       state.Psystems.push(c.system);
       const row = await Promise.all(Dpareto.map(async (item) => {
@@ -98,7 +173,7 @@ export async function runGEPA_System(
     }
     state.bestIdx = argmax(S.map(r => avg(r)));
     state.seeded = true;
-    logger.info(`Seeded +${seeded.length - 1} candidates (screen=${screen.length})`);
+    logger.info(`Seeded +${Math.max(0, seeded.candidates.length - 1)} candidates (screen=${screen.length}) calls=${seeded.usedCalls}`);
     if (persist?.onCheckpoint) await persist.onCheckpoint(state, { iter: state.iter, seeded: true });
   }
 
@@ -132,15 +207,26 @@ export async function runGEPA_System(
     if (state.budgetLeft <= 0) break;
 
     // Mutate with chosen strategy
-    const chosenId = bandit.pick();
-    logger.info(`Strategy: ${chosenId}; minibatch size=${M.length}`);
-    const hint = (strategies.find(s => s.id === chosenId)?.hint) ?? '';
+    // Decide exploration vs exploitation and whether to drop hints (pure GEPA reflection)
+    const exploreProb = calcExploreProb();
+    const noHintProb = calcNoHintProb();
+    const doNoHint = Math.random() < noHintProb;
+    let chosenId = bandit.pick();
+    if (Math.random() < exploreProb) {
+      // Explore: bias toward core strategies; if none marked, use top-K by list order
+      const core: StrategyDef[] = (activeStrategies as Array<StrategyDef & { core?: boolean }>).filter(s => (s as any).core === true);
+      const pool: StrategyDef[] = core.length ? core : activeStrategies.slice(0, Math.min(scheduleOpts.defaultCoreTopK, activeStrategies.length));
+      chosenId = pool[Math.floor(Math.random() * pool.length)]?.id ?? chosenId;
+    }
+    logger.info(`Strategy: ${doNoHint ? 'no-hint' : chosenId}; minibatch size=${M.length} exploreProb=${exploreProb.toFixed(2)} noHintProb=${noHintProb.toFixed(2)}`);
+    const hint = doNoHint ? '' : ((activeStrategies.find(s => s.id === chosenId)?.hint) ?? '');
     const examples: JudgedExample[] = before.map(x => ({
       user: dtrain.find(d => d.id === x.id)?.user ?? '',
       output: x.output,
       feedback: x.feedback
     }));
     const newSystem = await proposeNewSystem(llm, parent.system, examples, hint);
+    logger.debug(`New system preview: ${(newSystem || '').slice(0, 120)}`);
     const child: Candidate = { system: newSystem };
 
     // Re-evaluate on same minibatch
@@ -155,8 +241,25 @@ export async function runGEPA_System(
 
     // Reward bandit: map [-1,1] -> [0,1]
     const reward = Math.max(0, Math.min(1, (sigmaP - sigma + 1) / 2));
-    bandit.update(chosenId, reward);
+    if (!doNoHint) bandit.update(chosenId, reward);
+    pushUplift(sigmaP - sigma);
     logger.info(`Uplift: before=${sigma.toFixed(3)} after=${sigmaP.toFixed(3)} reward=${reward.toFixed(3)} budgetLeft=${state.budgetLeft}`);
+
+    // If improvements are slowing down, consider re-prefiltering the strategy set
+    if (recentAvgUplift() <= scheduleOpts.slowdownThreshold && (state.iter - lastPrefilterIter) >= reprefilterCooldown) {
+      try {
+        const pf = await prefilterStrategies(llm, strategiesRaw as any, previewTexts, prefilterCfg);
+        if (pf.kept.length > 0) {
+          activeStrategies = pf.kept as StrategyDef[];
+          bandit = new UCB1(activeStrategies.map(s => s.id));
+          state.bandit = bandit.serialize();
+          lastPrefilterIter = state.iter;
+          logger.step('Strategy switch', `kept=${activeStrategies.length}/${strategiesRaw.length}`);
+        }
+      } catch (e) {
+        logger.warn(`Re-prefilter failed; keeping current strategies (${(e as Error).message})`);
+      }
+    }
 
     // Holdout gate
     let passHold = true;
@@ -173,7 +276,10 @@ export async function runGEPA_System(
       minibatchIds: M.map(m => m.id),
       sigmaBefore: sigma,
       sigmaAfter: sigmaP,
-      accepted: sigmaP > sigma && passHold
+      accepted: sigmaP > sigma && passHold,
+      // persist minimal structured debug info (bounded size)
+      before: before.map(x => ({ id: x.id, score: x.score, feedback: x.feedback.slice(0, 500) })),
+      proposedSystem: (newSystem || '').slice(0, 2000)
     };
 
     // Accept child → score on Pareto set
@@ -181,8 +287,9 @@ export async function runGEPA_System(
       P.push(child);
       state.Psystems.push(child.system);
       const row = await Promise.all(Dpareto.map(async (item) => {
-        const { output } = await execute({ candidate: child, item });
-        return opts.mu(output, item.meta ?? null);
+        const { output, traces } = await execute({ candidate: child, item });
+        const f = await opts.muf({ item, output, traces: traces ?? null });
+        return f.score;
       }));
       S.push(row);
       state.S = S;

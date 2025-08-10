@@ -2,7 +2,9 @@ import type { Candidate } from './types.js';
 
 /** Pareto-based candidate selection (Algorithm-2 style). Returns index k in P. */
 export function selectCandidate(P: Candidate[], S: number[][]): number {
+  if (P.length === 0) return 0;
   const nItems = S[0]?.length ?? 0;
+  if (nItems === 0) return 0;
 
   // Instance-wise best sets P*[i]
   const Pstar: Array<Set<number>> = Array.from({ length: nItems }, (_, i) => {

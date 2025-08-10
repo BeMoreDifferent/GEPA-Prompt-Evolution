@@ -58,24 +58,27 @@ async function main(): Promise<void> {
       judgeModel: String(config['judgeModel'] ?? 'gpt-5-mini'),
       temperature: Number(config['actorTemperature'] ?? 0.4),
       maxTokens: Number(config['actorMaxTokens'] ?? 512),
-      ...(typeof config['baseURL'] === 'string' ? { baseURL: String(config['baseURL']) } : {})
+      ...(typeof config['baseURL'] === 'string' ? { baseURL: String(config['baseURL']) } : {}),
+      ...(typeof config['requestTimeoutMs'] === 'number' ? { requestTimeoutMs: Number(config['requestTimeoutMs']) } : {})
     });
 
     // executor (actor)
     const execute: GepaOptions['execute'] = async ({ candidate, item }) => {
-      const content = await chatLLM.chat([
-        { role: 'system', content: candidate.system },
-        { role: 'user', content: item.user }
-      ], { temperature: Number(config['actorTemperature'] ?? 0.4), maxTokens: Number(config['actorMaxTokens'] ?? 512) });
-      return { output: content };
+      const prompt = [
+        'SYSTEM:\n' + candidate.system,
+        'USER:\n' + item.user,
+        'ASSISTANT:'
+      ].join('\n\n');
+      const content = await actorLLM.complete(prompt);
+      return { output: content, traces: { system: candidate.system } };
     };
 
     // metrics (judge)
     const rubric = String(config['rubric'] ?? 'Correctness, coverage, safety, brevity.');
     const mu: MetricMu = () => 0; // placeholder numeric (Pareto over judge is okay if you have none)
-    const muf: FeedbackMuF = async ({ item, output }) => {
-      const system = (runCtx as any).state?.Psystems?.at(-1) ?? input.system;
-      const j = await judgeScore(chatLLM, rubric, system, item.user, output);
+    const muf: FeedbackMuF = async ({ item, output, traces }) => {
+      const system = (traces as any)?.system ?? (runCtx as any).state?.Psystems?.at(-1) ?? input.system;
+      const j = await judgeScore(chatLLM, rubric, String(system), item.user, output);
       return { score: j.score, feedbackText: j.feedback };
     };
 

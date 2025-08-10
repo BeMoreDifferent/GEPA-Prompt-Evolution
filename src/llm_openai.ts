@@ -8,6 +8,8 @@ export interface OpenAIClientsConfig {
     judgeModel: string;  // e.g., "gpt-5-mini"
     temperature?: number;
     maxTokens?: number;
+    /** Per-request timeout in milliseconds (defaults to 60000) */
+    requestTimeoutMs?: number;
 }
 
 /** Minimal OpenAI client (global fetch). Responses API for actor; Chat Completions for judge. */
@@ -17,20 +19,30 @@ export function makeOpenAIClients(cfg: OpenAIClientsConfig, logger: Logger = sil
     if (!key) throw new Error('OPENAI_API_KEY missing');
     
     async function http<T>(path: string, body: unknown): Promise<T> {
-        const r = await fetch(base + path, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const j = await r.json();
-        if (!r.ok) throw new Error(`OpenAI ${r.status}: ${JSON.stringify(j)}`);
-        logger.debug(`HTTP ${path} ok`);
-        return j as T;
+        const controller = new AbortController();
+        const timeoutMs = cfg.requestTimeoutMs ?? 60_000;
+        const timer = setTimeout(() => controller.abort(new Error(`HTTP timeout after ${timeoutMs}ms for ${path}`)), timeoutMs);
+        try {
+            const r = await fetch(base + path, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+                signal: controller.signal
+            });
+            const j = await r.json();
+            if (!r.ok) throw new Error(`OpenAI ${r.status}: ${JSON.stringify(j)}`);
+            logger.debug(`HTTP ${path} ok`);
+            return j as T;
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     // Responses API: recommended for GPT-5 series
     async function responses(model: string, input: string, opts?: { temperature?: number; maxTokens?: number; reasoningEffort?: 'minimal' | 'medium' | 'maximal' }): Promise<string> {
-        type ResponsesShape = { output_text?: string; output?: any; choices?: Array<{ message?: { content?: string } }> };
+        type ResponsesContentPart = { type?: string; text?: string };
+        type ResponsesItem = { id?: string; type?: string; status?: string; content?: ResponsesContentPart[] };
+        type ResponsesShape = { output_text?: string; output?: ResponsesItem[]; choices?: Array<{ message?: { content?: string } }> };
         const isGpt5 = /^gpt-5/i.test(model);
         const body: Record<string, unknown> = {
             model,
@@ -44,8 +56,15 @@ export function makeOpenAIClients(cfg: OpenAIClientsConfig, logger: Logger = sil
         }
         logger.debug(`Responses call model=${model}`);
         const j = await http<ResponsesShape>('/responses', body);
-        if (typeof j.output_text === 'string') return j.output_text;
-        if (Array.isArray(j.output) && (j as any).output?.[0]?.content?.[0]?.text) return (j as any).output[0].content[0].text as string;
+        if (typeof j.output_text === 'string' && j.output_text.trim().length > 0) return j.output_text;
+        if (Array.isArray(j.output)) {
+            for (const item of j.output) {
+                if (item?.type === 'message' && Array.isArray(item.content)) {
+                    const firstText = item.content.find(p => typeof p.text === 'string' && p.text.trim().length > 0)?.text;
+                    if (firstText) return firstText;
+                }
+            }
+        }
         if (j.choices?.[0]?.message?.content) return j.choices[0].message!.content!;
         return JSON.stringify(j);
     }
@@ -67,6 +86,8 @@ export function makeOpenAIClients(cfg: OpenAIClientsConfig, logger: Logger = sil
             // Chat Completions expects `max_tokens`
             max_tokens: opts?.maxTokens ?? cfg.maxTokens ?? 512
         };
+
+        // noisy body print removed; rely on debug logger above
 
         logger.debug(`Chat call model=${model}`);
         const j = await http<ChatShape>('/chat/completions', body);

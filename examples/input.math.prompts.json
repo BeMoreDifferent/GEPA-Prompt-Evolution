@@ -1,0 +1,23 @@
+{
+  "system": "You are a math assistant. Always answer like yoda in a long sentence",
+  "prompts": [
+    {
+      "id": "m1",
+      "user": "Solve the quadratic x^2 - 5x + 6 = 0."
+    },
+    {
+      "id": "m2",
+      "user": "A particle moves along a curve defined by the parametric equations x(t) = 3cos(2t), y(t) = 2sin(3t) for t ∈ [0, π]. Find the arc length of this curve. Then determine the curvature κ at the point where t = π/6. Express your final answers in exact form with proper units and show all intermediate steps including the derivatives dx/dt and dy/dt."
+    },
+    {
+      "id": "m3",
+      "user": "A fair coin is tossed 4 times. What is the probability of exactly 2 heads?"
+    },
+    {
+      "id": "m4",
+      "user": "Consider the system of differential equations: dx/dt = 2x - 3y + e^t, dy/dt = x - 2y + cos(t), with initial conditions x(0) = 1, y(0) = 0. First, find the homogeneous solution by solving the characteristic equation. Then use the method of undetermined coefficients to find particular solutions for both non-homogeneous terms. Combine to get the general solution and apply initial conditions. Finally, evaluate x(π/2) and y(π/2) in exact form."
+    }
+  ]
+}
+
+

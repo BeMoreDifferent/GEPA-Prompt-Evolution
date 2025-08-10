@@ -65,6 +65,8 @@ export interface GepaOptions {
   holdoutSize?: number;         // default 0
   epsilonHoldout?: number;      // default 0.02
   strategiesPath?: string;      // default "strategies/strategies.json"
+  /** Adaptive strategy scheduling options */
+  strategySchedule?: StrategyScheduleOptions;
 }
 
 /** Serializable bandit state */
@@ -86,6 +88,34 @@ export interface GEPAState {
   bestIdx: number;
   seeded: boolean;
   bandit: Ucb1State | null;
+}
+
+/**
+ * Controls how frequently we explore strategies vs exploit the bandit, and how often
+ * we perform pure GEPA reflection without any strategy hint. The explore probability
+ * scales up when recent uplifts are small.
+ */
+export interface StrategyScheduleOptions {
+  /** Window size for recent uplifts moving average */
+  windowSize?: number;            // default 8
+  /** If avg uplift within window is below this, boost exploration */
+  slowdownThreshold?: number;     // default 0.01
+  /** Base exploration probability when improving well */
+  baseExploreProb?: number;       // default 0.1
+  /** Max exploration probability when stagnating */
+  maxExploreProb?: number;        // default 0.6
+  /** Probability to drop hints entirely (pure reflection) under normal conditions */
+  baseNoHintProb?: number;        // default 0.15
+  /** Max probability to drop hints entirely when stagnating */
+  maxNoHintProb?: number;         // default 0.4
+  /** Number of core strategies to consider for exploration when JSON lacks explicit "core" */
+  defaultCoreTopK?: number;       // default 6
+  /** Minimum applicability score to keep a strategy after LLM prefilter */
+  prefilterThreshold?: number;    // default 0.3
+  /** Max number of strategies to keep after prefilter (0 = keep all) */
+  prefilterTopK?: number;         // default 10
+  /** Cooldown in iterations before re-running prefilter when stagnating */
+  reprefilterCooldownIters?: number; // default 6
 }
 
 

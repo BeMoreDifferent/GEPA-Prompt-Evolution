@@ -1,4 +1,5 @@
 import type { ChatLLM, TaskItem } from './types.js';
+import { clampNumber, safeParseWithSchema, type CompletionSchema } from './json.js';
 
 export function buildJudgePrompt(rubric: string): string {
   return [
@@ -22,13 +23,17 @@ export async function judgeScore(
     { role: 'user', content: `System:\n${system}\n\nUser:\n${user}\n\nAssistant:\n${assistant}` }
   ]);
 
-  try {
-    const j = JSON.parse(content.trim()) as { score?: unknown; feedback?: unknown };
-    const s = Math.max(0, Math.min(1, Number(j.score)));
-    return { score: Number.isFinite(s) ? s : 0, feedback: String(j.feedback ?? '') };
-  } catch {
-    return { score: 0, feedback: 'Non-JSON judge output' };
-  }
+  // Structured parse with clamping and defaults
+  const schema: CompletionSchema<{ score: number; feedback: string }> = {
+    parse(input: unknown) {
+      const o = (typeof input === 'object' && input) ? (input as Record<string, unknown>) : {};
+      const score = clampNumber(o.score, 0, 1, 0);
+      const feedback = typeof o.feedback === 'string' ? o.feedback : '';
+      return { score, feedback };
+    }
+  };
+  const parsed = safeParseWithSchema(content, schema);
+  return parsed;
 }
 
 
