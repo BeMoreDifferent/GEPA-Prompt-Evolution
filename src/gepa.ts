@@ -36,7 +36,8 @@ export async function runGEPA_System(
   const {
     execute, mu, muf, llm,
     budget, minibatchSize: b, paretoSize: nPareto,
-    holdoutSize = 0, epsilonHoldout = 0.02, strategiesPath = DEFAULT_STRATEGIES_PATH
+    holdoutSize = 0, epsilonHoldout = 0.02, strategiesPath = DEFAULT_STRATEGIES_PATH,
+    scoreForPareto = 'muf'
   } = opts;
   const logger: Logger = persist?.logger ?? silentLogger;
   logger.step('GEPA start', `budget=${budget}, pareto=${nPareto}, minibatch=${b}`);
@@ -87,14 +88,26 @@ export async function runGEPA_System(
   const P: Candidate[] = state.Psystems.map(s => ({ system: s }));
   const S: number[][] = state.S.length ? state.S : (state.S = []);
 
+  // Helper to compute a Pareto row using configured scorer
+  const scoreParetoRow = async (cand: Candidate): Promise<number[]> => {
+    if (scoreForPareto === 'mu') {
+      return Promise.all(Dpareto.map(async (item) => {
+        const { output } = await execute({ candidate: cand, item });
+        return mu(output, item.meta ?? null);
+      }));
+    }
+    // Default to 'muf'
+    return Promise.all(Dpareto.map(async (item) => {
+      const { output, traces } = await execute({ candidate: cand, item });
+      const f = await muf({ item, output, traces: traces ?? null });
+      return f.score;
+    }));
+  };
+
   // Seed Pareto row for initial candidate if missing
   if (S.length === 0) {
     logger.step('Init Pareto row', `k=0 over ${Dpareto.length} items`);
-    const row = await Promise.all(Dpareto.map(async (item) => {
-      const { output, traces } = await execute({ candidate: P[0], item });
-      const f = await opts.muf({ item, output, traces: traces ?? null });
-      return f.score;
-    }));
+    const row = await scoreParetoRow(P[0]);
     S.push(row);
   }
 
@@ -178,10 +191,7 @@ export async function runGEPA_System(
     for (const c of seeded.candidates.slice(1)) {
       P.push({ system: c.system });
       state.Psystems.push(c.system);
-      const row = await Promise.all(Dpareto.map(async (item) => {
-        const { output } = await execute({ candidate: { system: c.system }, item });
-        return mu(output, item.meta ?? null);
-      }));
+      const row = await scoreParetoRow({ system: c.system });
       S.push(row);
     }
     state.bestIdx = argmax(S.map(r => avg(r)));
@@ -307,11 +317,7 @@ export async function runGEPA_System(
     if (iterPayload.accepted) {
       P.push(child);
       state.Psystems.push(child.system);
-      const row = await Promise.all(Dpareto.map(async (item) => {
-        const { output, traces } = await execute({ candidate: child, item });
-        const f = await opts.muf({ item, output, traces: traces ?? null });
-        return f.score;
-      }));
+      const row = await scoreParetoRow(child);
       S.push(row);
       state.S = S;
       state.bestIdx = argmax(S.map(r => avg(r)));

@@ -128,6 +128,7 @@ Configs live in JSON files (see `examples/config.min.json` and `examples/config.
 - `rubric` (string, optional): Judge rubric text for score and feedback.
 - `strategiesPath` (string, optional): Path to strategy hints JSON (default: `strategies/strategies.json`).
 - `baseURL` (string, optional): Override OpenAI API base URL.
+- `scoreForPareto` ("muf" | "mu", optional): Which scorer populates the Pareto score matrix `S`. Default "muf" (judge score). Set to "mu" to use numeric metric.
 
 Example (`examples/config.min.json`):
 

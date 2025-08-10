@@ -67,6 +67,8 @@ export interface GepaOptions {
   strategiesPath?: string;      // default "strategies/strategies.json"
   /** Adaptive strategy scheduling options */
   strategySchedule?: StrategyScheduleOptions;
+  /** Which scorer populates the Pareto score matrix S; default 'muf' (judge). */
+  scoreForPareto?: 'muf' | 'mu';
 }
 
 /** Serializable bandit state */
