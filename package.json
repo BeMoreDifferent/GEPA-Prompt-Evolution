@@ -1,10 +1,12 @@
 {
   "name": "gepa-spo",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "type": "module",
   "private": false,
   "license": "MIT",
-  "bin": { "gepa-spo": "./dist/cli.js" },
+  "bin": {
+    "gepa-spo": "./dist/cli.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
@@ -27,19 +29,37 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution"
+    "url": "https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution.git"
+  },
+  "author": {
+    "name": "BeMoreDifferent",
+    "url": "https://github.com/BeMoreDifferent"
   },
   "bugs": {
     "url": "https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution/issues"
   },
   "homepage": "https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution#readme",
+  "description": "Genetic-Pareto prompt optimizer to evolve system prompts from a few rollouts with modular support and intelligent crossover",
+  "keywords": [
+    "prompt-optimization",
+    "genetic-algorithm",
+    "pareto-frontier",
+    "llm",
+    "openai",
+    "typescript",
+    "cli",
+    "modular-prompts",
+    "crossover",
+    "reflection"
+  ],
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "^22.5.0",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
     "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.1"
   }
 }
-
-
