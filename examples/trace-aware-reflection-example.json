@@ -1,0 +1,43 @@
+{
+  "description": "Example demonstrating trace-aware reflection in GEPA",
+  "seed": {
+    "system": "You are a helpful assistant that provides accurate answers to questions."
+  },
+  "tasks": [
+    {
+      "id": "math-1",
+      "user": "What is 2 + 2?",
+      "meta": { "category": "math", "difficulty": "easy" }
+    },
+    {
+      "id": "math-2", 
+      "user": "What is 15 * 7?",
+      "meta": { "category": "math", "difficulty": "medium" }
+    },
+    {
+      "id": "fact-1",
+      "user": "What is the capital of France?",
+      "meta": { "category": "geography", "difficulty": "easy" }
+    }
+  ],
+  "config": {
+    "budget": 20,
+    "minibatchSize": 2,
+    "paretoSize": 2,
+    "holdoutSize": 1,
+    "epsilonHoldout": 0.02,
+    "crossoverProbability": 0.1,
+    "mufCosts": true,
+    "scoreForPareto": "muf"
+  },
+  "notes": [
+    "This example demonstrates how GEPA uses execution traces in reflection prompts.",
+    "The execute function should return traces with execution details like:",
+    "- System prompt used",
+    "- Processing steps taken", 
+    "- Timing information",
+    "- Metadata about the task",
+    "These traces are automatically summarized and included in reflection prompts",
+    "to help the LLM understand how the system behaved during execution."
+  ]
+}

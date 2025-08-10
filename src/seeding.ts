@@ -1,4 +1,4 @@
-import { proposeNewSystem, type JudgedExample } from './reflection.js';
+import { proposeNewSystem, type JudgedExample, summarizeTraces } from './reflection.js';
 import type { Candidate, LLM, SystemExecute, FeedbackMuF, TaskItem } from './types.js';
 
 export interface StrategyDef { id: string; hint: string }
@@ -21,20 +21,40 @@ export interface SeedArgs {
 export async function seedPopulation({
   seed, screen, strategies, K, execute, muf, llm, budgetLeft, mufCosts = true
 }: SeedArgs): Promise<{ candidates: Array<Candidate & { _via: string; _uplift: number }>; usedCalls: number }> {
-  const out: Array<Candidate & { _via: string; _uplift: number }> = [{ system: seed.system, _via: 'seed', _uplift: 0 }];
+  const out: Array<Candidate & { _via: string; _uplift: number }> = [{ system: seed.system ?? '', _via: 'seed', _uplift: 0 }];
   let usedCalls = 0;
 
   for (const s of strategies.slice(0, K)) {
     if (budgetLeft !== undefined && budgetLeft <= 0) break;
-    const ex: JudgedExample[] = screen.map(x => ({ user: x.user, output: '', feedback: 'Initial strategy seeding' }));
-    const sys2 = await proposeNewSystem(llm, seed.system, ex, s.hint);
+    
+    // Execute the seed system on screen items to get actual examples with traces
+    const examples: JudgedExample[] = [];
+    for (const item of screen) {
+      if (budgetLeft !== undefined && budgetLeft <= 0) break;
+      const { output, traces } = await execute({ candidate: seed, item });
+      const f = await muf({ item, output, traces: traces ?? null });
+      const execTrace = summarizeTraces(traces, 1000);
+      examples.push({
+        user: item.user,
+        output,
+        feedback: f.feedbackText,
+        ...(execTrace && { execTrace })
+      });
+      // Count execute always, plus muf when configured
+      const delta = 1 + (mufCosts ? 1 : 0);
+      usedCalls += delta;
+      if (budgetLeft !== undefined) budgetLeft -= delta;
+    }
+    
+    const sys2 = await proposeNewSystem(llm, seed.system ?? '', examples, s.hint);
     usedCalls += 1; if (budgetLeft !== undefined) budgetLeft -= 1; // propose call
+    
     const scores: number[] = [];
     for (const item of screen) {
       if (budgetLeft !== undefined && budgetLeft <= 0) break;
       const { output, traces } = await execute({ candidate: { system: sys2 }, item });
       // Judge may or may not count to usedCalls
-      const f = await muf({ item, output, traces: { ...(traces ?? {}), system: sys2 } });
+      const f = await muf({ item, output, traces: traces ?? null });
       scores.push(f.score);
       // Count execute always, plus muf when configured
       const delta = 1 + (mufCosts ? 1 : 0);

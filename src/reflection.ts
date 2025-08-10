@@ -5,13 +5,74 @@ export interface JudgedExample {
   user: string;
   output: string;
   feedback: string;
+  /** Optional execution trace summary */
+  execTrace?: string;
+  /** Optional evaluator trace summary */
+  evalTrace?: string;
+}
+
+/**
+ * Summarizes trace data into a bounded, deterministic string format
+ * @param traces - Raw trace data from execution or evaluation
+ * @param maxSize - Maximum size in characters for the summary
+ * @returns Summarized trace string or undefined if no traces
+ */
+export function summarizeTraces(traces: Record<string, unknown> | null | undefined, maxSize: number = 1000): string | undefined {
+  if (!traces || typeof traces !== 'object') {
+    return undefined;
+  }
+
+  try {
+    // Convert to stable JSON with sorted keys for determinism
+    const sortedKeys = Object.keys(traces).sort();
+    const sortedTraces: Record<string, unknown> = {};
+    for (const key of sortedKeys) {
+      sortedTraces[key] = traces[key];
+    }
+    
+    const jsonStr = JSON.stringify(sortedTraces, null, 2);
+    
+    // Truncate if too long, preserving JSON structure
+    if (jsonStr.length <= maxSize) {
+      return jsonStr;
+    }
+    
+    // Truncate and add ellipsis, trying to preserve complete key-value pairs
+    const truncated = jsonStr.slice(0, maxSize - 3);
+    const lastComma = truncated.lastIndexOf(',');
+    const lastBrace = truncated.lastIndexOf('}');
+    const lastNewline = truncated.lastIndexOf('\n');
+    
+    // Find the best truncation point
+    let truncateAt = Math.max(lastComma, lastBrace, lastNewline);
+    if (truncateAt === -1 || truncateAt < maxSize * 0.8) {
+      truncateAt = maxSize - 3;
+    }
+    
+    return truncated.slice(0, truncateAt) + '...';
+  } catch (error) {
+    // Fallback to string representation if JSON fails
+    const str = String(traces);
+    return str.length <= maxSize ? str : str.slice(0, maxSize - 3) + '...';
+  }
 }
 
 /** Build the meta-prompt that asks the LLM to rewrite the system prompt */
 export function buildReflectionPrompt(system: string, examples: JudgedExample[], strategyHint = ''): string {
-  const ex = examples.map((e, i) =>
-    [`#${i + 1} USER:`, e.user, `ASSISTANT:`, e.output, `FEEDBACK:`, e.feedback].join('\n')
-  ).join('\n\n');
+  const ex = examples.map((e, i) => {
+    const parts = [`#${i + 1} USER:`, e.user, `ASSISTANT:`, e.output, `FEEDBACK:`, e.feedback];
+    
+    // Add traces section if present
+    const traces: string[] = [];
+    if (e.execTrace) traces.push(`EXECUTION TRACE: ${e.execTrace}`);
+    if (e.evalTrace) traces.push(`EVALUATOR TRACE: ${e.evalTrace}`);
+    
+    if (traces.length > 0) {
+      parts.push(`TRACES:`, ...traces);
+    }
+    
+    return parts.join('\n');
+  }).join('\n\n');
 
   return [
     'You will REWRITE the system prompt for an assistant.',
@@ -33,9 +94,20 @@ export function buildModuleReflectionPrompt(
   examples: JudgedExample[],
   strategyHint = ''
 ): string {
-  const ex = examples.map((e, i) =>
-    [`#${i + 1} USER:`, e.user, `ASSISTANT:`, e.output, `FEEDBACK:`, e.feedback].join('\n')
-  ).join('\n\n');
+  const ex = examples.map((e, i) => {
+    const parts = [`#${i + 1} USER:`, e.user, `ASSISTANT:`, e.output, `FEEDBACK:`, e.feedback];
+    
+    // Add traces section if present
+    const traces: string[] = [];
+    if (e.execTrace) traces.push(`EXECUTION TRACE: ${e.execTrace}`);
+    if (e.evalTrace) traces.push(`EVALUATOR TRACE: ${e.evalTrace}`);
+    
+    if (traces.length > 0) {
+      parts.push(`TRACES:`, ...traces);
+    }
+    
+    return parts.join('\n');
+  }).join('\n\n');
 
   const moduleContext = allModules.map((m, i) => 
     `${i === moduleIndex ? '>>> ' : ''}Module ${i + 1} (${m.id}): ${i === moduleIndex ? 'CURRENT MODULE TO UPDATE' : 'PRESERVE AS-IS'}`

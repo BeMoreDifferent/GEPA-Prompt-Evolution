@@ -1,5 +1,5 @@
 import { selectCandidate } from './selection.js';
-import { proposeNewSystem, proposeNewModule, type JudgedExample } from './reflection.js';
+import { proposeNewSystem, proposeNewModule, type JudgedExample, summarizeTraces } from './reflection.js';
 import { UCB1 } from './bandit.js';
 import { seedPopulation, type StrategyDef } from './seeding.js';
 import type {
@@ -255,14 +255,21 @@ export async function runGEPA_System(
 
     // Minibatch over feedback set
     const M = sampleMinibatch(Dfb, b);
-    const before: Array<{ id: string; score: number; feedback: string; output: string }> = [];
+    const before: Array<{ id: string; score: number; feedback: string; output: string; execTrace?: string; evalTrace?: string }> = [];
     for (const item of M) {
       if (!budgetTracker.canAfford(1 + (mufCosts ? 1 : 0))) break;
       const { output, traces } = await execute({ candidate: parent, item });
       budgetTracker.dec(1, 'before:execute');
       const f = await opts.muf({ item, output, traces: traces ?? null });
       if (mufCosts) budgetTracker.dec(1, 'before:muf');
-      before.push({ id: item.id, score: f.score, feedback: f.feedbackText, output });
+      const execTrace = summarizeTraces(traces, 1000);
+      before.push({ 
+        id: item.id, 
+        score: f.score, 
+        feedback: f.feedbackText, 
+        output,
+        ...(execTrace && { execTrace })
+      });
     }
     const sigma = avg(before.map(x => x.score));
     state.budgetLeft = budgetTracker.remaining();
@@ -354,7 +361,8 @@ export async function runGEPA_System(
       const examples: JudgedExample[] = before.map(x => ({
         user: dtrain.find(d => d.id === x.id)?.user ?? '',
         output: x.output,
-        feedback: x.feedback
+        feedback: x.feedback,
+        ...(x.execTrace && { execTrace: x.execTrace })
       }));
       if (!budgetTracker.canAfford(1)) break;
       

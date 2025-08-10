@@ -258,6 +258,54 @@ Core logic overview:
 - **Holdout gate**: If a holdout set exists, accept only if child ≥ parent on holdout within `epsilonHoldout` tolerance.
 - **Pareto tracking**: For every accepted child, score across the Pareto set and update the running best by Pareto mean.
 
+### Trace-Aware Reflection
+
+GEPA includes execution traces in reflection prompts to provide richer context for prompt evolution:
+
+- **Execution Traces**: The `execute` function can return optional `traces` that capture execution details like processing steps, timing, metadata, etc.
+- **Automatic Summarization**: Traces are automatically summarized with deterministic formatting and size limits (~1KB) to prevent token bloat.
+- **Reflection Integration**: Summarized traces are included in reflection prompts under a "TRACES" section when present.
+- **Backward Compatibility**: Systems without traces continue to work unchanged.
+
+Example execute function with traces:
+```typescript
+const execute: GepaOptions['execute'] = async ({ candidate, item }) => {
+  const startTime = Date.now();
+  const output = await chatLLM.chat([
+    { role: 'system', content: candidate.system },
+    { role: 'user', content: item.user }
+  ]);
+  
+  return {
+    output,
+    traces: {
+      system: candidate.system,
+      timestamp: new Date().toISOString(),
+      processingTime: Date.now() - startTime,
+      steps: ['parsed_input', 'generated_response'],
+      metadata: { itemId: item.id, category: item.meta?.category }
+    }
+  };
+};
+```
+
+The traces will appear in reflection prompts like:
+```
+TRACES:
+EXECUTION TRACE: {
+  "metadata": {
+    "itemId": "math-1",
+    "category": "math"
+  },
+  "processingTime": 1250,
+  "steps": ["parsed_input", "generated_response"],
+  "system": "You are a helpful assistant...",
+  "timestamp": "2025-08-10T13:15:49.646Z"
+}
+```
+
+See `examples/trace-aware-reflection-example.json` for a complete example.
+
 ### Crossover (Merge) Functionality
 
 GEPA supports optional system-aware crossover operations that combine complementary modules from different candidates:
