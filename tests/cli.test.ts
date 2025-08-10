@@ -11,6 +11,17 @@ describe('cli.parseArgs', () => {
   test('handles empty argv', () => {
     expect(parseArgs([])).toEqual({});
   });
+
+  test('parses --api-key value', () => {
+    const args = parseArgs(['--api-key', 'abc123']);
+    expect(args['api-key']).toBe('abc123');
+  });
+
+  test('parses --log and --log-level', () => {
+    const args = parseArgs(['--log', '--log-level', 'debug']);
+    expect(args.log).toBe('true');
+    expect(args['log-level']).toBe('debug');
+  });
 });
 
 describe('cli.main exported', () => {

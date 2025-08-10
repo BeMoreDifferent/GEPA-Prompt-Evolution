@@ -20,7 +20,7 @@ pnpm build
 ```
 
 Environment:
-- Set `OPENAI_API_KEY` in your shell environment.
+- Set `OPENAI_API_KEY` in your shell environment, or pass `--api-key` via CLI.
 - Optional: `baseURL` in config to point to a different OpenAI-compatible endpoint.
 
 ---
@@ -34,7 +34,8 @@ The CLI binary is `gepa-spo` (installed from the local checkout via `pnpm build`
 pnpm build && node dist/cli.js \
   --runs-root ./runs-test/demo \
   --input ./examples/input.min.prompts.json \
-  --config ./examples/config.min.json
+  --config ./examples/config.min.json \
+  --log --log-level debug
 
 # Or use the npm bin name if linked/installed
 # gepa-spo --runs-root ./runs-test/demo --input ./examples/input.min.prompts.json --config ./examples/config.min.json
@@ -62,6 +63,9 @@ CLI flags:
 - `--config <file>`: JSON config (see schema below).
 - `--out <file>`: Optional path to write the latest best system prompt.
 - `--resume <runDir>`: Resume from an existing run directory.
+- `--api-key <key>`: OpenAI API key (overrides `OPENAI_API_KEY`).
+- `--log` (bool): Enable colored, high-level progress logging to stderr.
+- `--log-level <level>`: One of `error|warn|info|debug` (default `info`).
 
 Exit conditions: The optimizer runs until the budget is exhausted.
 

@@ -6,6 +6,7 @@ import { makeOpenAIClients } from './llm_openai.js';
 import { judgeScore } from './judge.js';
 import { initRun, resumeRun, acquireLock, saveIteration, saveState, writeJsonAtomic } from './persist.js';
 import type { Candidate, GepaOptions, MetricMu, FeedbackMuF, TaskItem } from './types.js';
+import { createLogger, type LogLevel } from './logger.js';
 
 function parseArgs(argv: string[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -24,12 +25,16 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const runsRoot = args['runs-root'] || 'runs';
   const resumeDir = args.resume && args.resume !== 'true' ? args.resume : null;
+  const logEnabled = args.log !== undefined && args.log !== 'false';
+  const logLevel: LogLevel = (args['log-level'] as LogLevel) || 'info';
+  const logger = createLogger(logEnabled, logLevel);
 
   let runCtx: Awaited<ReturnType<typeof resumeRun>> | Awaited<ReturnType<typeof initRun>>;
   let unlock: (() => Promise<void>) | undefined;
 
   try {
     if (resumeDir) {
+      logger.step('Resume run', resumeDir);
       runCtx = await resumeRun(resumeDir);
       unlock = await acquireLock(runCtx.runDir);
     } else {
@@ -38,14 +43,17 @@ async function main(): Promise<void> {
       const config = JSON.parse(await fs.readFile(args.config, 'utf8')) as Record<string, unknown>;
       const outPath = args.out ? path.resolve(args.out) : null;
       runCtx = await initRun({ runsRoot, inputObj: input, configObj: config, outFile: outPath });
+      logger.step('Init run', runCtx.runDir);
       unlock = await acquireLock(runCtx.runDir);
     }
 
     const input = (runCtx as any).inputObj ?? JSON.parse(await fs.readFile(path.join(runCtx.runDir, 'input.json'), 'utf8'));
     const config = (runCtx as any).configObj ?? JSON.parse(await fs.readFile(path.join(runCtx.runDir, 'config.json'), 'utf8'));
 
+    const cliApiKey = args['api-key'] && args['api-key'] !== 'true' ? String(args['api-key']) : undefined;
+    logger.info('Building OpenAI clients');
     const { actorLLM, chatLLM } = makeOpenAIClients({
-      ...(process.env.OPENAI_API_KEY ? { apiKey: process.env.OPENAI_API_KEY } : {}),
+      ...(cliApiKey ? { apiKey: cliApiKey } : process.env.OPENAI_API_KEY ? { apiKey: process.env.OPENAI_API_KEY } : {}),
       actorModel: String(config['actorModel'] ?? 'gpt-5-mini'),
       judgeModel: String(config['judgeModel'] ?? 'gpt-5-mini'),
       temperature: Number(config['actorTemperature'] ?? 0.4),
@@ -85,6 +93,7 @@ async function main(): Promise<void> {
       await writeJsonAtomic(path.join((runCtx as any).runDir, 'best.json'), { system: best, bestIdx: state.bestIdx, iter: state.iter });
       const outPath = (runCtx as any).outPath || null;
       if (outPath) await fs.writeFile(outPath, best, 'utf8');
+      logger.debug('Persisted checkpoint to disk');
     }
 
     const best = await runGEPA_System(seed, dtrain, {
@@ -95,7 +104,7 @@ async function main(): Promise<void> {
       holdoutSize: Number(config['holdoutSize'] ?? 0),
       epsilonHoldout: Number(config['epsilonHoldout'] ?? 0.02),
       strategiesPath: String(config['strategiesPath'] ?? 'strategies/strategies.json')
-    }, { state: (runCtx as any).state, onCheckpoint });
+    }, { state: (runCtx as any).state, onCheckpoint, logger });
 
     // Print final best to stdout
     console.log(best.system);

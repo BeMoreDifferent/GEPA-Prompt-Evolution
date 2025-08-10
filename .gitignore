@@ -16,6 +16,7 @@ pnpm-debug.log*
 runs/
 runs-test/
 coverage/
+ai/
 
 # Editors
 .vscode/

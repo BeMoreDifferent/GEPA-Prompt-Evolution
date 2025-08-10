@@ -6,12 +6,14 @@ import type {
   Candidate, TaskItem, GepaOptions, GEPAState
 } from './types.js';
 import * as fs from 'node:fs/promises';
+import { type Logger, silentLogger } from './logger.js';
 
 type PersistHook = (state: GEPAState, iterPayload: Record<string, unknown>) => Promise<void>;
 
 export interface RunPersist {
   state?: GEPAState;
   onCheckpoint?: PersistHook;
+  logger?: Logger;
 }
 
 /** Optimize a single system prompt with GEPA + strategy bandit + holdout gates. */
@@ -26,6 +28,8 @@ export async function runGEPA_System(
     budget, minibatchSize: b, paretoSize: nPareto,
     holdoutSize = 0, epsilonHoldout = 0.02, strategiesPath = 'strategies/strategies.json'
   } = opts;
+  const logger: Logger = persist?.logger ?? silentLogger;
+  logger.step('GEPA start', `budget=${budget}, pareto=${nPareto}, minibatch=${b}`);
 
   // ---- resume or fresh ----
   let state: GEPAState = persist?.state ?? {
@@ -55,6 +59,7 @@ export async function runGEPA_System(
   const Dpareto = state.DparetoIdx.map(i => dtrain[i]);
   const Dhold   = state.DholdIdx.map(i => dtrain[i]);
   const Dfb     = state.DfbIdx.map(i => dtrain[i]);
+  logger.info(`Split: pareto=${Dpareto.length}, holdout=${Dhold.length}, feedback=${Dfb.length}`);
 
   // Rebuild P and S
   const P: Candidate[] = state.Psystems.map(s => ({ system: s }));
@@ -62,6 +67,7 @@ export async function runGEPA_System(
 
   // Seed Pareto row for initial candidate if missing
   if (S.length === 0) {
+    logger.step('Init Pareto row', `k=0 over ${Dpareto.length} items`);
     const row = await Promise.all(Dpareto.map(async (item) => {
       const { output } = await execute({ candidate: P[0], item });
       return mu(output, item.meta ?? null);
@@ -75,6 +81,7 @@ export async function runGEPA_System(
 
   // One-time seeding with top-K strategies (screen subset of feedback set)
   if (!state.seeded && Dfb.length) {
+    logger.step('Seeding population');
     const screen = Dfb.slice(0, Math.max(3, Math.floor(Dfb.length * 0.1)));
     const seeded = await seedPopulation({
       seed: { system: state.Psystems[0] }, screen, strategies,
@@ -91,6 +98,7 @@ export async function runGEPA_System(
     }
     state.bestIdx = argmax(S.map(r => avg(r)));
     state.seeded = true;
+    logger.info(`Seeded +${seeded.length - 1} candidates (screen=${screen.length})`);
     if (persist?.onCheckpoint) await persist.onCheckpoint(state, { iter: state.iter, seeded: true });
   }
 
@@ -109,6 +117,7 @@ export async function runGEPA_System(
   while (state.budgetLeft > 0) {
     const k = selectCandidate(P, S);
     const parent = P[k];
+    logger.step(`Iter ${state.iter + 1}`, `pick k=${k}`);
 
     // Minibatch over feedback set
     const M = sampleMinibatch(Dfb, b);
@@ -124,6 +133,7 @@ export async function runGEPA_System(
 
     // Mutate with chosen strategy
     const chosenId = bandit.pick();
+    logger.info(`Strategy: ${chosenId}; minibatch size=${M.length}`);
     const hint = (strategies.find(s => s.id === chosenId)?.hint) ?? '';
     const examples: JudgedExample[] = before.map(x => ({
       user: dtrain.find(d => d.id === x.id)?.user ?? '',
@@ -146,6 +156,7 @@ export async function runGEPA_System(
     // Reward bandit: map [-1,1] -> [0,1]
     const reward = Math.max(0, Math.min(1, (sigmaP - sigma + 1) / 2));
     bandit.update(chosenId, reward);
+    logger.info(`Uplift: before=${sigma.toFixed(3)} after=${sigmaP.toFixed(3)} reward=${reward.toFixed(3)} budgetLeft=${state.budgetLeft}`);
 
     // Holdout gate
     let passHold = true;
@@ -153,6 +164,7 @@ export async function runGEPA_System(
       const holdParent = await avgHoldout(parent);
       const holdChild = await avgHoldout(child);
       passHold = holdChild + epsilonHoldout >= holdParent;
+      logger.debug(`Holdout: parent=${holdParent.toFixed(3)} child=${holdChild.toFixed(3)} pass=${passHold}`);
     }
 
     const iterPayload = {
@@ -175,12 +187,19 @@ export async function runGEPA_System(
       S.push(row);
       state.S = S;
       state.bestIdx = argmax(S.map(r => avg(r)));
+      logger.step('Accepted', `k=${P.length - 1} bestIdx=${state.bestIdx}`);
+    } else {
+      logger.warn('Rejected');
     }
 
+    if (persist?.onCheckpoint) {
+      await persist.onCheckpoint(state, iterPayload);
+      logger.debug('Checkpoint saved');
+    }
     state.bandit = bandit.serialize();
-    if (persist?.onCheckpoint) await persist.onCheckpoint(state, iterPayload);
   }
 
+  logger.step('GEPA done', `bestIdx=${state.bestIdx}`);
   return P[state.bestIdx];
 }
 
