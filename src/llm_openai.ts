@@ -10,6 +10,17 @@ export interface OpenAIClientsConfig {
     maxTokens?: number;
     /** Per-request timeout in milliseconds (defaults to 60000) */
     requestTimeoutMs?: number;
+    /** Maximum number of retries for failed requests (defaults to 5) */
+    maxRetries?: number;
+    /** Initial retry delay in milliseconds (defaults to 1000) */
+    initialRetryDelayMs?: number;
+}
+
+/**
+ * Sleep for a given number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /** Minimal OpenAI client (global fetch). Responses API for actor; Chat Completions for judge. */
@@ -19,23 +30,49 @@ export function makeOpenAIClients(cfg: OpenAIClientsConfig, logger: Logger = sil
     if (!key) throw new Error('OPENAI_API_KEY missing');
     
     async function http<T>(path: string, body: unknown): Promise<T> {
-        const controller = new AbortController();
-        const timeoutMs = cfg.requestTimeoutMs ?? 60_000;
-        const timer = setTimeout(() => controller.abort(new Error(`HTTP timeout after ${timeoutMs}ms for ${path}`)), timeoutMs);
-        try {
-            const r = await fetch(base + path, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-                signal: controller.signal
-            });
-            const j = await r.json();
-            if (!r.ok) throw new Error(`OpenAI ${r.status}: ${JSON.stringify(j)}`);
-            logger.debug(`HTTP ${path} ok`);
-            return j as T;
-        } finally {
-            clearTimeout(timer);
+        const maxRetries = cfg.maxRetries ?? 5;
+        const initialDelay = cfg.initialRetryDelayMs ?? 1000;
+        let lastError: Error | null = null;
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                const controller = new AbortController();
+                const timeoutMs = cfg.requestTimeoutMs ?? 60_000;
+                const timer = setTimeout(() => controller.abort(new Error(`HTTP timeout after ${timeoutMs}ms for ${path}`)), timeoutMs);
+                
+                try {
+                    const r = await fetch(base + path, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                        signal: controller.signal
+                    });
+                    const j = await r.json();
+                    if (!r.ok) throw new Error(`OpenAI ${r.status}: ${JSON.stringify(j)}`);
+                    logger.debug(`HTTP ${path} ok`);
+                    return j as T;
+                } finally {
+                    clearTimeout(timer);
+                }
+            } catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                
+                // Don't retry on the last attempt
+                if (attempt === maxRetries) {
+                    logger.debug(`HTTP ${path} failed after ${maxRetries + 1} attempts, final error: ${lastError.message}`);
+                    throw lastError;
+                }
+
+                // Calculate exponential backoff delay
+                const delay = initialDelay * Math.pow(2, attempt);
+                logger.debug(`HTTP ${path} attempt ${attempt + 1} failed: ${lastError.message}, retrying in ${delay}ms`);
+                
+                await sleep(delay);
+            }
         }
+
+        // This should never be reached, but TypeScript requires it
+        throw lastError ?? new Error('Unknown error occurred');
     }
 
     // Responses API: recommended for GPT-5 series
