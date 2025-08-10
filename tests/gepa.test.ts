@@ -6,7 +6,6 @@ import type { Candidate, TaskItem, GepaOptions } from '../src/types.js';
 jest.mock('../src/llm_openai.js');
 jest.mock('../src/reflection.js');
 jest.mock('../src/strategy.js');
-jest.mock('node:fs/promises');
 
 describe('runGEPA_System', () => {
   beforeEach(() => {
@@ -31,12 +30,6 @@ describe('runGEPA_System', () => {
         kept: [{ id: 'test-strategy', hint: 'Test hint' }]
       })
     }));
-
-    // Mock fs.readFile for strategies
-    const mockFs = jest.mocked(await import('node:fs/promises'));
-    mockFs.readFile.mockResolvedValue(JSON.stringify([
-      { id: 'test-strategy', hint: 'Test hint' }
-    ]));
 
     const seed: Candidate = { system: 'You are a helpful assistant' };
     const dtrain: TaskItem[] = [
@@ -86,7 +79,6 @@ describe('runGEPA_System', () => {
       paretoSize: 5,
       holdoutSize: 4,
       epsilonHoldout: 0.02,
-      strategiesPath: 'strategies/strategies.json',
       scoreForPareto: 'muf',
       mufCosts: true
     };
@@ -110,12 +102,6 @@ describe('runGEPA_System', () => {
       })
     }));
 
-    // Mock fs.readFile for strategies
-    const mockFs = jest.mocked(await import('node:fs/promises'));
-    mockFs.readFile.mockResolvedValue(JSON.stringify([
-      { id: 'test-strategy', hint: 'Test hint' }
-    ]));
-
     const seed: Candidate = { system: 'You are a helpful assistant' };
     const dtrain: TaskItem[] = [
       { id: '1', user: 'Hello', meta: null },
@@ -132,7 +118,7 @@ describe('runGEPA_System', () => {
     });
 
     const muf = jest.fn().mockResolvedValue({
-      score: 0.6,
+      score: 0.8, // Higher score to trigger acceptance
       feedbackText: 'Good response'
     });
 
@@ -145,18 +131,18 @@ describe('runGEPA_System', () => {
       mu: () => 0.5,
       muf,
       llm,
-      budget: 10,
+      budget: 20,
       minibatchSize: 2,
       paretoSize: 2,
-      holdoutSize: 0,
+      holdoutSize: 1,
       epsilonHoldout: 0.02,
-      strategiesPath: 'strategies/strategies.json',
       scoreForPareto: 'muf',
       mufCosts: true
     };
 
     const result = await runGEPA_System(seed, dtrain, options);
     expect(result.system).toBeDefined();
+    // Note: mockProposeNewModule may not be called if the child is not accepted
   });
 
   it('stagnation triggers re-prefilter without crashing', async () => {
@@ -174,12 +160,6 @@ describe('runGEPA_System', () => {
       })
     }));
 
-    // Mock fs.readFile for strategies
-    const mockFs = jest.mocked(await import('node:fs/promises'));
-    mockFs.readFile.mockResolvedValue(JSON.stringify([
-      { id: 'test-strategy', hint: 'Test hint' }
-    ]));
-
     const seed: Candidate = { system: 'You are a helpful assistant' };
     const dtrain: TaskItem[] = [
       { id: '1', user: 'Hello', meta: null },
@@ -196,8 +176,8 @@ describe('runGEPA_System', () => {
     });
 
     const muf = jest.fn().mockResolvedValue({
-      score: 0.6,
-      feedbackText: 'Good response'
+      score: 0.3, // Lower score to trigger stagnation
+      feedbackText: 'Poor response'
     });
 
     const llm = {
@@ -209,12 +189,11 @@ describe('runGEPA_System', () => {
       mu: () => 0.5,
       muf,
       llm,
-      budget: 15,
+      budget: 20,
       minibatchSize: 2,
       paretoSize: 2,
-      holdoutSize: 0,
+      holdoutSize: 1,
       epsilonHoldout: 0.02,
-      strategiesPath: 'strategies/strategies.json',
       scoreForPareto: 'muf',
       mufCosts: true
     };
@@ -237,12 +216,6 @@ describe('runGEPA_System', () => {
         kept: [{ id: 'test-strategy', hint: 'Test hint' }]
       })
     }));
-
-    // Mock fs.readFile for strategies
-    const mockFs = jest.mocked(await import('node:fs/promises'));
-    mockFs.readFile.mockResolvedValue(JSON.stringify([
-      { id: 'test-strategy', hint: 'Test hint' }
-    ]));
 
     const seed: Candidate = { system: 'You are a helpful assistant' };
     const dtrain: TaskItem[] = [
@@ -269,12 +242,11 @@ describe('runGEPA_System', () => {
       mu: () => 0.5,
       muf,
       llm,
-      budget: 15,
+      budget: 20,
       minibatchSize: 1,
-      paretoSize: 2,
+      paretoSize: 1,
       holdoutSize: 0,
       epsilonHoldout: 0.02,
-      strategiesPath: 'strategies/strategies.json',
       scoreForPareto: 'muf',
       mufCosts: true
     };

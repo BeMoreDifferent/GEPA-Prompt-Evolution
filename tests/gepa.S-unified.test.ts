@@ -17,7 +17,7 @@ function makeOpts(scoreForPareto: 'muf' | 'mu', overrides?: Partial<GepaOptions>
     // judge muf also ignores content and uses sentinel value
     muf: () => ({ score: 0.81, feedbackText: 'x' }),
     llm: { complete: async () => 'child' },
-    budget: 8, // ensure seeding occurs and rows are added for seeded candidates
+    budget: 15, // ensure seeding occurs and rows are added for seeded candidates
     minibatchSize: 1,
     paretoSize: 3,
     holdoutSize: 0,
@@ -55,7 +55,7 @@ test('S uses mu when scoreForPareto=mu across init and seeding rows', async () =
 
 test('Post-accept rows also use muf when configured', async () => {
   const opts = makeOpts('muf', {
-    budget: 4,
+    budget: 12,
     minibatchSize: 1,
     paretoSize: 2,
     // Force acceptance by making child higher-scoring than parent via traces.system

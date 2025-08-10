@@ -20,7 +20,7 @@ describe('Budget invariant scaffold', () => {
     const seen: number[] = [];
     const best = await runGEPA_System(seed, dtrain, {
       execute, mu, muf, llm: actorLLM as any,
-      budget: 7, minibatchSize: 2, paretoSize: 3, holdoutSize: 0
+      budget: 15, minibatchSize: 2, paretoSize: 3, holdoutSize: 0
     }, {
       logger: createLogger(false, 'error'),
       onCheckpoint: async (state) => { seen.push(state.budgetLeft); }

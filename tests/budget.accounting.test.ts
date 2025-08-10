@@ -28,7 +28,7 @@ describe('Budget accounting correctness', () => {
       mu: baseMu,
       muf: baseMuf,
       llm: actorLLM as any,
-      budget: 7,
+      budget: 15,
       minibatchSize: 2,
       paretoSize: 3,
       holdoutSize: 2,

@@ -107,7 +107,7 @@ describe('Trace-aware reflection integration', () => {
       mu: (y: string) => 0.8,
       muf,
       llm,
-      budget: 5,
+      budget: 15,
       minibatchSize: 1,
       paretoSize: 1
     };
@@ -172,7 +172,7 @@ describe('Trace-aware reflection integration', () => {
       mu: (y: string) => 0.8,
       muf,
       llm,
-      budget: 5,
+      budget: 15,
       minibatchSize: 1,
       paretoSize: 1
     };
