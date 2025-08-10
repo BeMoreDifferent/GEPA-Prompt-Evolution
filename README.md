@@ -258,6 +258,27 @@ Core logic overview:
 - **Holdout gate**: If a holdout set exists, accept only if child ≥ parent on holdout within `epsilonHoldout` tolerance.
 - **Pareto tracking**: For every accepted child, score across the Pareto set and update the running best by Pareto mean.
 
+### Crossover (Merge) Functionality
+
+GEPA supports optional system-aware crossover operations that combine complementary modules from different candidates:
+
+- **Crossover Probability**: Set `crossoverProbability` in config (default: 0, mutation only).
+- **Module-wise Merging**: For modular candidates, combines modules based on lineage and scores.
+- **Lineage Tracking**: Maintains ancestry information to avoid merging direct relatives.
+- **Novelty Detection**: Ensures merged candidates introduce module-level novelty.
+
+Example configuration with 30% crossover probability:
+```json
+{
+  "budget": 50,
+  "minibatchSize": 3,
+  "paretoSize": 5,
+  "crossoverProbability": 0.3
+}
+```
+
+See `examples/crossover-example.json` for a complete example.
+
 ---
 
 ### Testing

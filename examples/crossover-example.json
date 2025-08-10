@@ -1,0 +1,26 @@
+{
+  "seed": {
+    "modules": [
+      {
+        "id": "personality",
+        "prompt": "You are a friendly and helpful assistant."
+      },
+      {
+        "id": "instructions", 
+        "prompt": "Always provide accurate and detailed responses."
+      },
+      {
+        "id": "safety",
+        "prompt": "Never provide harmful or inappropriate content."
+      }
+    ]
+  },
+  "config": {
+    "budget": 50,
+    "minibatchSize": 3,
+    "paretoSize": 5,
+    "crossoverProbability": 0.3,
+    "strategiesPath": "strategies/strategies.json"
+  },
+  "description": "Example configuration demonstrating GEPA crossover functionality. This example uses a 30% probability of crossover (merge) operations instead of mutation, allowing the system to combine complementary modules from different candidates."
+}

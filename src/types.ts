@@ -80,6 +80,8 @@ export interface GepaOptions {
   scoreForPareto?: 'muf' | 'mu';
   /** Whether judge calls (muf) should consume budget; default true */
   mufCosts?: boolean;
+  /** Probability of using crossover (merge) instead of mutation; default 0 */
+  crossoverProbability?: number;
 }
 
 /** Serializable bandit state */
@@ -105,6 +107,15 @@ export interface GEPAState {
   moduleIndex?: number;
   /** Number of modules in the system (for round-robin scheduling) */
   moduleCount?: number;
+  /** Lineage metadata: tracks which modules changed in each candidate */
+  lineage?: Array<{
+    /** Candidate index */
+    candidateIndex: number;
+    /** Array of module indices that were last changed in this candidate */
+    changedModules: number[];
+    /** Parent candidate index (for tracking ancestry) */
+    parentIndex?: number;
+  }>;
 }
 
 /**

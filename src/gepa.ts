@@ -17,7 +17,12 @@ import {
   getModuleCount, 
   serializeCandidate, 
   deserializeCandidate,
-  validateCandidate 
+  validateCandidate,
+  mergeCandidates,
+  areDirectRelatives,
+  hasBeenTriedBefore,
+  findSharedAncestor,
+  hasModuleNovelty
 } from './modules.js';
 
 type PersistHook = (state: GEPAState, iterPayload: Record<string, unknown>) => Promise<void>;
@@ -191,6 +196,14 @@ export async function runGEPA_System(
   let lastPrefilterIter = 0;
   const reprefilterCooldown = opts.strategySchedule?.reprefilterCooldownIters ?? 6;
 
+  // Initialize lineage tracking
+  if (!state.lineage) {
+    state.lineage = [];
+  }
+  
+  // Track tried merge triplets to avoid repetition
+  const triedTriplets: Array<[number, number, number]> = [];
+
   // One-time seeding with top-K strategies (screen subset of feedback set)
   if (!state.seeded && Dfb.length) {
     logger.step('Seeding population');
@@ -255,38 +268,114 @@ export async function runGEPA_System(
     state.budgetLeft = budgetTracker.remaining();
     if (budgetTracker.remaining() <= 0) break;
 
-    // Mutate with chosen strategy
-    // Decide exploration vs exploitation and whether to drop hints (pure GEPA reflection)
-    const exploreProb = calcExploreProb();
-    const noHintProb = calcNoHintProb();
-    const doNoHint = Math.random() < noHintProb;
-    let chosenId = bandit.pick();
-    if (Math.random() < exploreProb) {
-      // Explore: bias toward core strategies; if none marked, use top-K by list order
-      const core: StrategyDef[] = (activeStrategies as Array<StrategyDef & { core?: boolean }>).filter(s => (s as any).core === true);
-      const pool: StrategyDef[] = core.length ? core : activeStrategies.slice(0, Math.min(scheduleOpts.defaultCoreTopK, activeStrategies.length));
-      chosenId = pool[Math.floor(Math.random() * pool.length)]?.id ?? chosenId;
+    // Decide between mutation and crossover
+    const crossoverProb = opts.crossoverProbability ?? 0;
+    let useCrossover = Math.random() < crossoverProb && P.length > 1;
+    
+    let child: Candidate = parent; // Default to parent
+    let operationType: 'mutation' | 'crossover' = 'mutation';
+    let doNoHint = false;
+    let chosenId = '';
+    let secondParentIndex: number | undefined;
+    
+    if (useCrossover) {
+      // Crossover (merge) path
+      logger.info('Using crossover (merge) operation');
+      
+      // Select second parent (different from first)
+      do {
+        secondParentIndex = selectCandidate(P, S);
+      } while (secondParentIndex === k);
+      
+      const parentA = parent;
+      const parentB = P[secondParentIndex];
+      
+      // Check if parents are direct relatives
+      if (areDirectRelatives(k, secondParentIndex, state.lineage)) {
+        logger.warn('Skipping crossover: parents are direct relatives');
+        useCrossover = false;
+      } else {
+        // Find shared ancestor
+        const ancestorIndex = findSharedAncestor(k, secondParentIndex, state.lineage);
+        if (ancestorIndex === null) {
+          logger.warn('Skipping crossover: no shared ancestor found');
+          useCrossover = false;
+        } else {
+          // Check if this triplet has been tried before
+          if (hasBeenTriedBefore(k, secondParentIndex, ancestorIndex, triedTriplets)) {
+            logger.warn('Skipping crossover: triplet already tried');
+            useCrossover = false;
+          } else {
+            // Get lineage information
+            const lineageA = state.lineage.find(l => l.candidateIndex === k)?.changedModules ?? [];
+            const lineageB = state.lineage.find(l => l.candidateIndex === secondParentIndex)?.changedModules ?? [];
+            
+            // Get scores for both parents
+            const scoreA = avg(S[k]);
+            const scoreB = avg(S[secondParentIndex]);
+            
+            // Perform merge
+            child = mergeCandidates(parentA, parentB, lineageA, lineageB, scoreA, scoreB);
+            
+            // Check if merge introduces novelty
+            if (!hasModuleNovelty(child, parentA, parentB, lineageA, lineageB)) {
+              logger.warn('Skipping crossover: no module-level novelty');
+              useCrossover = false;
+            } else {
+              // Record this triplet as tried
+              triedTriplets.push([k, secondParentIndex, ancestorIndex]);
+              operationType = 'crossover';
+              
+              logger.info(`Crossover: parentA=${k}, parentB=${secondParentIndex}, ancestor=${ancestorIndex}`);
+            }
+          }
+        }
+      }
     }
-    logger.info(`Strategy: ${doNoHint ? 'no-hint' : chosenId}; minibatch size=${M.length} exploreProb=${exploreProb.toFixed(2)} noHintProb=${noHintProb.toFixed(2)}`);
-    const hint = doNoHint ? '' : ((activeStrategies.find(s => s.id === chosenId)?.hint) ?? '');
-    const examples: JudgedExample[] = before.map(x => ({
-      user: dtrain.find(d => d.id === x.id)?.user ?? '',
-      output: x.output,
-      feedback: x.feedback
-    }));
-    if (!budgetTracker.canAfford(1)) break;
     
-    // Round-robin module mutation
-    const moduleIndex = state.moduleIndex ?? 0;
-    const moduleCount = state.moduleCount ?? getModuleCount(parent);
+    if (!useCrossover) {
+      // Mutation path (existing logic)
+      operationType = 'mutation';
+      
+      // Mutate with chosen strategy
+      // Decide exploration vs exploitation and whether to drop hints (pure GEPA reflection)
+      const exploreProb = calcExploreProb();
+      const noHintProb = calcNoHintProb();
+      doNoHint = Math.random() < noHintProb;
+      chosenId = bandit.pick();
+      if (Math.random() < exploreProb) {
+        // Explore: bias toward core strategies; if none marked, use top-K by list order
+        const core: StrategyDef[] = (activeStrategies as Array<StrategyDef & { core?: boolean }>).filter(s => (s as any).core === true);
+        const pool: StrategyDef[] = core.length ? core : activeStrategies.slice(0, Math.min(scheduleOpts.defaultCoreTopK, activeStrategies.length));
+        chosenId = pool[Math.floor(Math.random() * pool.length)]?.id ?? chosenId;
+      }
+      logger.info(`Strategy: ${doNoHint ? 'no-hint' : chosenId}; minibatch size=${M.length} exploreProb=${exploreProb.toFixed(2)} noHintProb=${noHintProb.toFixed(2)}`);
+      const hint = doNoHint ? '' : ((activeStrategies.find(s => s.id === chosenId)?.hint) ?? '');
+      const examples: JudgedExample[] = before.map(x => ({
+        user: dtrain.find(d => d.id === x.id)?.user ?? '',
+        output: x.output,
+        feedback: x.feedback
+      }));
+      if (!budgetTracker.canAfford(1)) break;
+      
+      // Round-robin module mutation
+      const moduleIndex = state.moduleIndex ?? 0;
+      const moduleCount = state.moduleCount ?? getModuleCount(parent);
+      
+      logger.info(`Mutating module ${moduleIndex + 1}/${moduleCount}`);
+      
+      child = await proposeNewModule(llm, parent, moduleIndex, examples, hint);
+      budgetTracker.dec(1, 'propose');
+      
+      // Update module index for next iteration (round-robin)
+      state.moduleIndex = (moduleIndex + 1) % moduleCount;
+    }
     
-    logger.info(`Mutating module ${moduleIndex + 1}/${moduleCount}`);
-    
-    const child = await proposeNewModule(llm, parent, moduleIndex, examples, hint);
-    budgetTracker.dec(1, 'propose');
-    
-    // Update module index for next iteration (round-robin)
-    state.moduleIndex = (moduleIndex + 1) % moduleCount;
+    // Ensure child is assigned (fallback to parent if neither crossover nor mutation succeeded)
+    if (!child) {
+      child = parent;
+      operationType = 'mutation';
+    }
     
     const systemPreview = isSingleSystem(child) ? child.system : 
                          isModular(child) ? child.modules.map(m => m.prompt).join('\n\n') : '';
@@ -349,13 +438,40 @@ export async function runGEPA_System(
 
     // Accept child → score on Pareto set
     if (iterPayload.accepted) {
+      const newCandidateIndex = P.length;
       P.push(child);
       state.Psystems.push(serializeCandidate(child));
       const row = await scoreParetoRow(child);
       S.push(row);
       state.S = S;
       state.bestIdx = argmax(S.map(r => avg(r)));
-      logger.step('Accepted', `k=${P.length - 1} bestIdx=${state.bestIdx}`);
+      
+      // Update lineage tracking
+      if (operationType === 'mutation') {
+        // For mutation, track which module was changed
+        const moduleIndex = state.moduleIndex ?? 0;
+        const moduleCount = state.moduleCount ?? getModuleCount(parent);
+        const actualModuleIndex = (moduleIndex - 1 + moduleCount) % moduleCount; // Get the module that was actually mutated
+        
+        state.lineage.push({
+          candidateIndex: newCandidateIndex,
+          changedModules: [actualModuleIndex],
+          parentIndex: k
+        });
+      } else if (operationType === 'crossover' && secondParentIndex !== undefined) {
+        // For crossover, track modules from both parents
+        const lineageA = state.lineage.find(l => l.candidateIndex === k)?.changedModules ?? [];
+        const lineageB = state.lineage.find(l => l.candidateIndex === secondParentIndex)?.changedModules ?? [];
+        const mergedModules = [...new Set([...lineageA, ...lineageB])]; // Union of changed modules
+        
+        state.lineage.push({
+          candidateIndex: newCandidateIndex,
+          changedModules: mergedModules,
+          parentIndex: k // Primary parent
+        });
+      }
+      
+      logger.step('Accepted', `k=${newCandidateIndex} bestIdx=${state.bestIdx} operation=${operationType}`);
     } else {
       logger.warn('Rejected');
     }
