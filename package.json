@@ -3,6 +3,7 @@
   "version": "0.3.0",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "bin": { "gepa-spo": "./dist/cli.js" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -10,6 +11,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/cli.js",
     "demo:min": "node dist/cli.js --runs-root ./runs-test/demo --input ./examples/input.min.prompts.json --config ./examples/config.min.json"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

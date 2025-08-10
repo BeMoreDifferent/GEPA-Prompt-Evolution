@@ -8,8 +8,6 @@ This repository provides:
 - **Persistence**: Reproducible runs with checkpoints, best prompt export, and resume support.
 - **Examples**: Minimal and task-specific configs and input sets.
 
-Requires Node 18+ (global `fetch`) and pnpm.
-
 ---
 
 ### Installation
@@ -22,6 +20,9 @@ pnpm build
 Environment:
 - Set `OPENAI_API_KEY` in your shell environment, or pass `--api-key` via CLI.
 - Optional: `baseURL` in config to point to a different OpenAI-compatible endpoint.
+
+Security and privacy:
+- No prompts, keys, or outputs are logged unless `--log` is set. Avoid placing secrets in input/config files.
 
 ---
 
@@ -68,6 +69,11 @@ CLI flags:
 - `--log-level <level>`: One of `error|warn|info|debug` (default `info`).
 
 Exit conditions: The optimizer runs until the budget is exhausted.
+
+Edge cases handled by CLI:
+- **Tiny datasets**: If the feedback set would be empty, the Pareto set is reused for feedback to ensure progress.
+- **Budget starvation**: Seeding reserves budget to guarantee at least one full iteration; the loop stops cleanly when `budgetLeft` reaches 0.
+- **Concurrent runs**: A per-run lock prevents two writers on the same run directory.
 
 ---
 
@@ -139,6 +145,11 @@ Strategy hints are plain JSON objects with `id` and `hint` used to steer the ref
 ```
 
 The UCB1 bandit selects among these strategy IDs using observed uplift during optimization.
+
+How strategy scheduling works:
+- **Prefilter**: Before the first iteration, strategies may be filtered against the corpus preview using the LLM to remove irrelevant hints.
+- **Adaptive explore/exploit**: Exploration probability increases when recent uplift slows, encouraging more diverse mutations and occasional no-hint (pure reflection) steps.
+- **Re-prefilter**: If gains stagnate for several iterations, the strategy set may be re-filtered to re-focus on promising hints.
 
 ---
 
@@ -222,6 +233,13 @@ Key exported building blocks (see `src/`):
 - `judgeScore(...)` – JSON-constrained rubric-based evaluator.
 - Types: `Candidate`, `TaskItem`, `GepaOptions`, `LLM`, `ChatLLM`.
 
+Core logic overview:
+- **Seeding**: Screen a small subset of the feedback set with the top-K strategy hints to propose initial children. Evaluate children on the Pareto set and keep those that help.
+- **Iteration**: For the selected parent, evaluate on a minibatch to get before scores and feedback, reflect to propose a new system, then re-evaluate after.
+- **Bandit reward**: Uplift `(after - before)` is mapped from [-1, 1] to [0, 1] and used to update the UCB1 bandit when a hint was used.
+- **Holdout gate**: If a holdout set exists, accept only if child ≥ parent on holdout within `epsilonHoldout` tolerance.
+- **Pareto tracking**: For every accepted child, score across the Pareto set and update the running best by Pareto mean.
+
 ---
 
 ### Testing
@@ -233,6 +251,37 @@ pnpm build       # emit to dist/
 ```
 
 Tests include unit and integration coverage for the bandit, selection, reflection, persistence, and CLI wrapper.
+
+To run a minimal end-to-end smoke test locally with example configs:
+
+```bash
+pnpm build && node dist/cli.js \
+  --runs-root ./runs-test/demo \
+  --input ./examples/input.min.prompts.json \
+  --config ./examples/config.min.json \
+  --log --log-level info
+```
+
+If you see `ExperimentalWarning: VM Modules`, it is expected in our Jest setup with ESM.
+
+---
+
+### Contributing
+
+Contributions are welcome! Please open an issue to discuss your idea or a draft PR if you already have a prototype.
+
+- Fork the repo and create a feature branch.
+- Ensure `pnpm build`, `pnpm typecheck`, and `pnpm test` are green.
+- Follow Conventional Commits for PR titles/messages (e.g., `feat:`, `fix:`, `docs:`).
+- Keep code small and well-tested; add Jest tests for new behavior.
+
+See `CONTRIBUTING.md` for details.
+
+---
+
+### License
+
+This project is licensed under the MIT License – see `LICENSE` for details.
 
 ---
 
