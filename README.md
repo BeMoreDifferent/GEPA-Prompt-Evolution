@@ -1,439 +1,241 @@
-### GEPA Prompt Evolution (GEPA-SPO)
+# GEPA Prompt Evolution (GEPA-SPO)
 
 [![npm version](https://img.shields.io/npm/v/gepa-spo.svg)](https://www.npmjs.com/package/gepa-spo)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
 
-Genetic-Pareto prompt optimizer to evolve system prompts from a few rollouts. GEPA performs natural-language reflection over full trajectories, mutates the system prompt with multiple strategies, and maintains a Pareto frontier rather than collapsing to a single candidate. A simple UCB1 bandit selects mutation strategies by observed uplift, with optional holdout gating to prevent regressions.
+> **Genetic-Pareto prompt optimizer** to evolve system prompts from a few rollouts. GEPA performs natural-language reflection over full trajectories, mutates prompts with multiple strategies, and maintains a Pareto frontier rather than collapsing to a single candidate.
 
-This repository provides:
-- **CLI**: Optimize a system prompt from JSON inputs and configs.
-- **Core Engine**: Type-safe TypeScript APIs for custom integrations.
-- **Persistence**: Reproducible runs with checkpoints, best prompt export, and resume support.
-- **Examples**: Minimal and task-specific configs and input sets.
-
----
-
-### Installation & usage
+## 🚀 Quick Start
 
 ```bash
-# Run via npx (no install). Requires Node >= 18
-export OPENAI_API_KEY=...  # or pass --api-key
+# Set your OpenAI API key
+export OPENAI_API_KEY="your-api-key-here"
 
-# Using npm
-npx gepa-spo --runs-root ./runs \
-  --input /absolute/path/to/input.json \
-  --config /absolute/path/to/config.json
-
-# Using pnpm
-pnpm dlx gepa-spo --runs-root ./runs \
-  --input /absolute/path/to/input.json \
-  --config /absolute/path/to/config.json
-
-# Optional: local install for development
-pnpm install && pnpm build
-```
-
-Environment:
-- Set `OPENAI_API_KEY` in your shell environment, or pass `--api-key` via CLI.
-- Optional: `baseURL` in config to point to a different OpenAI-compatible endpoint.
-
-Security and privacy:
-- No prompts, keys, or outputs are logged unless `--log` is set. Avoid placing secrets in input/config files.
-
----
-
-### Quick start (CLI)
-
-The CLI binary is `gepa-spo` and is available via `npx` or `pnpm dlx`:
-
-```bash
-# Minimal run (provide your own input/config JSON files)
+# Run optimization (no installation required)
 npx gepa-spo \
   --runs-root ./runs \
-  --input /absolute/path/to/input.json \
-  --config /absolute/path/to/config.json \
-  --log --log-level debug
-
-# pnpm users can also run
-# pnpm dlx gepa-spo --runs-root ./runs --input /abs/path/input.json --config /abs/path/config.json
+  --input ./examples/input.prompts.json \
+  --config ./examples/config.json \
+  --log
 ```
 
-On success, the best evolved system prompt is printed to stdout and persisted under the run directory. To write the best prompt to a specific file:
+**What you get:**
+- ✅ **CLI Tool**: Optimize prompts from JSON inputs
+- ✅ **Modular Systems**: Support for multi-component prompts
+- ✅ **Core API**: TypeScript library for custom integrations
+- ✅ **Persistence**: Resume interrupted runs, export best prompts
+- ✅ **Strategy Bandit**: Adaptive strategy selection via UCB1
 
-```bash
-npx gepa-spo \
-  --runs-root ./runs \
-  --input /absolute/path/to/input.json \
-  --config /absolute/path/to/config.json \
-  --out ./runs/best.txt
-```
+## 📖 Documentation
 
-Resume a previous run:
+- **[CLI Documentation](CLI_DOCUMENTATION.md)** - Complete CLI reference and usage guide
+- **[Module System Documentation](MODULE_DOCUMENTATION.md)** - Modular prompt optimization features
+- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute to the project
 
-```bash
-npx gepa-spo --resume /absolute/path/to/runs/<run-folder>
-```
+## 🎯 Key Features
 
-CLI flags:
-- `--runs-root <dir>`: Root folder for new runs (default: `runs`).
-- `--input <file>`: JSON file with `system` and `prompts`.
-- `--config <file>`: JSON config (see schema below).
-- `--out <file>`: Optional path to write the latest best system prompt.
-- `--resume <runDir>`: Resume from an existing run directory.
-- `--api-key <key>`: OpenAI API key (overrides `OPENAI_API_KEY`).
-- `--log` (bool): Enable colored, high-level progress logging to stderr.
-- `--log-level <level>`: One of `error|warn|info|debug` (default `info`).
-
-Exit conditions: The optimizer runs until the budget is exhausted.
-
-Edge cases handled by CLI:
-- **Tiny datasets**: If the feedback set would be empty, the Pareto set is reused for feedback to ensure progress.
-- **Budget starvation**: Seeding reserves budget to guarantee at least one full iteration; the loop stops cleanly when `budgetLeft` reaches 0.
-- **Concurrent runs**: A per-run lock prevents two writers on the same run directory.
-
----
-
-### Input format
-
-GEPA supports two input formats: traditional single system prompt and modular system prompts.
-
-#### Traditional format (backward compatible)
-
-`examples/input.min.prompts.json`:
-
+### Single-System Optimization
 ```json
 {
   "system": "You are a helpful assistant. Be concise.",
   "prompts": [
-    { "id": "p1", "user": "Name two benefits of unit tests." }
+    { "id": "p1", "user": "What are the benefits of unit testing?" }
   ]
 }
 ```
 
-#### Modular format (new)
-
-`examples/input.modules.json`:
-
+### Modular System Optimization
 ```json
 {
   "modules": [
-    {
-      "id": "intro",
-      "prompt": "You are a helpful assistant that provides accurate and concise answers."
-    },
-    {
-      "id": "safety",
-      "prompt": "Always prioritize safety and avoid harmful content."
-    },
-    {
-      "id": "style",
-      "prompt": "Be clear, concise, and well-structured in your responses."
-    }
+    { "id": "personality", "prompt": "You are friendly and helpful." },
+    { "id": "safety", "prompt": "Never provide harmful content." }
   ],
   "prompts": [
-    { "id": "p1", "user": "Name two benefits of unit tests." }
+    { "id": "p1", "user": "What are the benefits of unit testing?" }
   ]
 }
 ```
 
-**Fallback behavior**: If both `system` and `modules` are provided, the `system` prompt takes precedence for backward compatibility.
+### Advanced Features
+- **Round-robin mutation** for modular systems
+- **Intelligent crossover** combining complementary modules
+- **Trace-aware reflection** with execution context
+- **Holdout gating** to prevent overfitting
+- **Strategy bandit** for adaptive optimization
 
-**Module concatenation**: When using modules, they are automatically concatenated with double newlines (`\n\n`) to form a single system prompt for the default executor.
+## 🔧 Installation
 
-`prompts[i].meta` is optional and forwarded to numeric metrics if you supply one.
+### Quick Start (Recommended)
+```bash
+# No installation needed - runs via npx
+npx gepa-spo --help
+```
 
-Other examples:
-- `examples/input.prompts.json` shows a multi-item dataset
-- `examples/input.atomic_facts.json` demonstrates a structured evaluation task
+### Local Development
+```bash
+# Clone and install
+git clone https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution.git
+cd GEPA-Prompt-Evolution
+pnpm install
+pnpm build
 
----
+# Run locally
+node dist/cli.js --help
+```
 
-### Config schema
+## 📋 Requirements
 
-Configs live in JSON files (see `examples/config.min.json` and `examples/config.json`). Supported keys:
+- **Node.js** >= 18
+- **OpenAI API Key** (or compatible endpoint)
+- **pnpm** (recommended) or npm
 
-- `actorModel` (string): Model for the actor (prompt evolution rollouts), e.g., `gpt-5-mini`.
-- `judgeModel` (string): Model for the judge (evaluation), e.g., `gpt-5-mini`.
-- `budget` (number): Total evaluation budget (number of LLM calls across minibatches and gates).
-- `minibatchSize` (number): Number of feedback-set items evaluated per iteration.
-- `paretoSize` (number): Number of items in the Pareto set for multi-objective tracking.
-- `holdoutSize` (number, optional): Size of the holdout set (subset of train) to gate regressions.
-- `epsilonHoldout` (number, optional): Tolerance added to the child vs parent holdout comparison (default: 0.02).
-- `actorTemperature` (number, optional): Temperature for actor calls (default: 0.4 in CLI).
-- `actorMaxTokens` (number, optional): Max tokens for actor calls (default: 512 in CLI).
-- `rubric` (string, optional): Judge rubric text for score and feedback.
-- `strategiesPath` (string, optional): Path to strategy hints JSON (default: `strategies/strategies.json`).
-- `baseURL` (string, optional): Override OpenAI API base URL.
-- `scoreForPareto` ("muf" | "mu", optional): Which scorer populates the Pareto score matrix `S`. Default "muf" (judge score). Set to "mu" to use numeric metric.
-- `mufCosts` (boolean, optional): Whether judge calls (muf) should consume budget. Default `true`.
-- `crossoverProb` (number, optional): Probability of using crossover (merge) instead of mutation. Range [0,1]. Default `0`.
+## 🛠️ Usage Examples
 
-Example (`examples/config.min.json`):
+### Basic Optimization
+```bash
+npx gepa-spo \
+  --runs-root ./my-runs \
+  --input ./examples/input.prompts.json \
+  --config ./examples/config.json \
+  --log
+```
 
+### Modular System
+```bash
+npx gepa-spo \
+  --runs-root ./modular-runs \
+  --input ./examples/input.modules.json \
+  --config ./examples/config.modular.json \
+  --log
+```
+
+### Resume Interrupted Run
+```bash
+npx gepa-spo --resume ./my-runs/2024-01-15T10-30-45Z-demo-abc123
+```
+
+### Save Best Prompt
+```bash
+npx gepa-spo \
+  --input ./input.json \
+  --config ./config.json \
+  --out ./best-prompt.txt
+```
+
+## ⚙️ Configuration
+
+### Basic Config
 ```json
 {
   "actorModel": "gpt-5-mini",
   "judgeModel": "gpt-5-mini",
-  "budget": 120,
-  "minibatchSize": 3,
-  "paretoSize": 6,
-  "holdoutSize": 3,
-  "epsilonHoldout": 0.01,
-  "actorTemperature": 0.2,
-  "actorMaxTokens": 700,
-  "rubric": "Evaluate only the JSON quality and adherence to rules...",
-  "strategiesPath": "strategies/strategies.json"
-}
-```
-
-Example with new config keys (`examples/config.modular.json`):
-
-```json
-{
-  "actorModel": "gpt-5-nano",
-  "judgeModel": "gpt-5-nano",
-  "budget": 25,
+  "budget": 100,
   "minibatchSize": 4,
   "paretoSize": 8,
-  "holdoutSize": 6,
-  "epsilonHoldout": 0.02,
-  "actorTemperature": 0.4,
-  "actorMaxTokens": 512,
-  "rubric": "Correctness, coverage, safety, brevity.",
-  "strategiesPath": "strategies/strategies.json",
-  "scoreForPareto": "muf",
-  "mufCosts": true,
-  "crossoverProb": 0.1
+  "crossoverProb": 0.2
 }
 ```
 
----
+### Key Settings
+- **`budget`**: Total LLM calls for optimization
+- **`minibatchSize`**: Items evaluated per iteration
+- **`paretoSize`**: Items for multi-objective tracking
+- **`crossoverProb`**: Probability of crossover vs mutation [0,1]
 
-### Strategies
+See [CLI Documentation](CLI_DOCUMENTATION.md) for complete configuration options.
 
-Strategy hints are plain JSON objects with `id` and `hint` used to steer the reflection step, e.g. `strategies/strategies.json`:
+## 🔌 Programmatic API
 
-```json
-[
-  { "id": "polya-4step", "hint": "Apply Pólya’s 4 steps: Understand, Plan, Execute, Reflect..." },
-  { "id": "fermi-estimate", "hint": "When unknown quantities appear, use Fermi estimation..." }
-]
-```
-
-The UCB1 bandit selects among these strategy IDs using observed uplift during optimization.
-
-How strategy scheduling works:
-- **Prefilter**: Before the first iteration, strategies may be filtered against the corpus preview using the LLM to remove irrelevant hints.
-- **Adaptive explore/exploit**: Exploration probability increases when recent uplift slows, encouraging more diverse mutations and occasional no-hint (pure reflection) steps.
-- **Re-prefilter**: If gains stagnate for several iterations, the strategy set may be re-filtered to re-focus on promising hints.
-
----
-
-### What gets written to disk
-
-Under `--runs-root`, each run creates a folder like:
-
-```
-<runs-root>/<ISO8601>-<slug>-<sha16>/
-├─ input.json            # copied from your input
-├─ config.json           # copied from your config
-├─ state.json            # optimizer state (supports resume)
-├─ best.json             # latest best system and metadata
-├─ .outpath              # optional, stores the --out destination path
-└─ iterations/
-   ├─ iter-0001.json
-   ├─ iter-0002.json
-   └─ ...
-```
-
-The CLI holds an exclusive lock file during a run to avoid concurrent writers.
-
----
-
-### Programmatic API (TypeScript)
-
-```ts
-// When installed as a package, import from the built output
+```typescript
 import { runGEPA_System } from 'gepa-spo/dist/gepa.js';
 import { makeOpenAIClients } from 'gepa-spo/dist/llm_openai.js';
-import type { Candidate, TaskItem, GepaOptions, MetricMu, FeedbackMuF } from 'gepa-spo/dist/types.js';
 
-const input = {
-  system: 'You are a helpful assistant. Be concise.',
-  prompts: [{ id: 'p1', user: 'Name two benefits of unit tests.' }]
-};
-
-const { actorLLM, chatLLM } = makeOpenAIClients({
+const { actorLLM } = makeOpenAIClients({
   apiKey: process.env.OPENAI_API_KEY!,
-  actorModel: 'gpt-5-mini',
-  judgeModel: 'gpt-5-mini'
+  actorModel: 'gpt-5-mini'
 });
 
-const execute: GepaOptions['execute'] = async ({ candidate, item }) => {
-  // Single-turn chat using judge client for simplicity in this snippet
-  const output = await chatLLM.chat([
-    { role: 'system', content: candidate.system },
-    { role: 'user', content: item.user }
-  ]);
-  return { output };
-};
-
-const mu: MetricMu = () => 0; // numeric metric optional; Pareto still maintained
-
-const muf: FeedbackMuF = async ({ item, output }) => {
-  // Provide your own judging logic or reuse judgeScore()
-  return { score: 0.5, feedbackText: 'neutral' };
-};
-
-const seed: Candidate = { system: input.system };
-const dtrain: TaskItem[] = input.prompts.map((p, i) => ({ id: p.id ?? String(i + 1), user: p.user }));
-
-const best = await runGEPA_System(seed, dtrain, {
-  execute,
-  mu,
-  muf,
+const best = await runGEPA_System(seed, taskItems, {
+  execute: async ({ candidate, item }) => ({
+    output: await actorLLM.complete(`${candidate.system}\n\nUser: ${item.user}`)
+  }),
+  mu: () => 0,
+  muf: async ({ item, output }) => ({ score: 0.5, feedbackText: 'neutral' }),
   llm: actorLLM,
   budget: 50,
   minibatchSize: 3,
-  paretoSize: 4,
-  holdoutSize: 2,
-  epsilonHoldout: 0.02,
-  strategiesPath: 'strategies/strategies.json'
+  paretoSize: 4
 });
 
 console.log(best.system);
 ```
 
-Key exported building blocks (see `src/`):
-- `runGEPA_System(...)` – core optimizer loop with seeding, bandit, and holdout gates.
-- `makeOpenAIClients(...)` – minimal OpenAI clients for responses/chat APIs.
-- `judgeScore(...)` – JSON-constrained rubric-based evaluator.
-- Types: `Candidate`, `TaskItem`, `GepaOptions`, `LLM`, `ChatLLM`.
-
-Core logic overview:
-- **Seeding**: Screen a small subset of the feedback set with the top-K strategy hints to propose initial children. Evaluate children on the Pareto set and keep those that help.
-- **Iteration**: For the selected parent, evaluate on a minibatch to get before scores and feedback, reflect to propose a new system, then re-evaluate after.
-- **Bandit reward**: Uplift `(after - before)` is mapped from [-1, 1] to [0, 1] and used to update the UCB1 bandit when a hint was used.
-- **Holdout gate**: If a holdout set exists, accept only if child ≥ parent on holdout within `epsilonHoldout` tolerance.
-- **Pareto tracking**: For every accepted child, score across the Pareto set and update the running best by Pareto mean.
-
-### Trace-Aware Reflection
-
-GEPA includes execution traces in reflection prompts to provide richer context for prompt evolution:
-
-- **Execution Traces**: The `execute` function can return optional `traces` that capture execution details like processing steps, timing, metadata, etc.
-- **Automatic Summarization**: Traces are automatically summarized with deterministic formatting and size limits (~1KB) to prevent token bloat.
-- **Reflection Integration**: Summarized traces are included in reflection prompts under a "TRACES" section when present.
-- **Backward Compatibility**: Systems without traces continue to work unchanged.
-
-Example execute function with traces:
-```typescript
-const execute: GepaOptions['execute'] = async ({ candidate, item }) => {
-  const startTime = Date.now();
-  const output = await chatLLM.chat([
-    { role: 'system', content: candidate.system },
-    { role: 'user', content: item.user }
-  ]);
-  
-  return {
-    output,
-    traces: {
-      system: candidate.system,
-      timestamp: new Date().toISOString(),
-      processingTime: Date.now() - startTime,
-      steps: ['parsed_input', 'generated_response'],
-      metadata: { itemId: item.id, category: item.meta?.category }
-    }
-  };
-};
-```
-
-The traces will appear in reflection prompts like:
-```
-TRACES:
-EXECUTION TRACE: {
-  "metadata": {
-    "itemId": "math-1",
-    "category": "math"
-  },
-  "processingTime": 1250,
-  "steps": ["parsed_input", "generated_response"],
-  "system": "You are a helpful assistant...",
-  "timestamp": "2025-08-10T13:15:49.646Z"
-}
-```
-
-See `examples/trace-aware-reflection-example.json` for a complete example.
-
-### Crossover (Merge) Functionality
-
-GEPA supports optional system-aware crossover operations that combine complementary modules from different candidates:
-
-- **Crossover Probability**: Set `crossoverProbability` in config (default: 0, mutation only).
-- **Module-wise Merging**: For modular candidates, combines modules based on lineage and scores.
-- **Lineage Tracking**: Maintains ancestry information to avoid merging direct relatives.
-- **Novelty Detection**: Ensures merged candidates introduce module-level novelty.
-
-Example configuration with 30% crossover probability:
-```json
-{
-  "budget": 50,
-  "minibatchSize": 3,
-  "paretoSize": 5,
-  "crossoverProbability": 0.3
-}
-```
-
-See `examples/crossover-example.json` for a complete example.
-
----
-
-### Testing
+## 🧪 Testing
 
 ```bash
-pnpm test        # jest
-pnpm typecheck   # tsc --noEmit
-pnpm build       # emit to dist/
-```
+# Run all tests
+pnpm test
 
-Tests include unit and integration coverage for the bandit, selection, reflection, persistence, and CLI wrapper.
+# Type checking
+pnpm typecheck
 
-To run a minimal end-to-end smoke test locally with example configs:
+# Build
+pnpm build
 
-```bash
+# End-to-end smoke test
 pnpm build && node dist/cli.js \
   --runs-root ./runs-test/demo \
   --input ./examples/input.min.prompts.json \
   --config ./examples/config.min.json \
-  --log --log-level info
+  --log
 ```
 
-If you see `ExperimentalWarning: VM Modules`, it is expected in our Jest setup with ESM.
+## 📁 Project Structure
+
+```
+GEPA-Prompt-Evolution/
+├── src/                    # Core TypeScript source
+├── tests/                  # Test suite
+├── examples/               # Example configs and inputs
+├── strategies/             # Strategy hints for optimization
+├── CLI_DOCUMENTATION.md    # Complete CLI reference
+├── MODULE_DOCUMENTATION.md # Modular system guide
+└── CONTRIBUTING.md         # Contribution guidelines
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+**Quick start for contributors:**
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run `pnpm test` and `pnpm typecheck`
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+
+## 🔬 Research
+
+GEPA (Genetic-Pareto) is a prompt optimization method that:
+- Uses natural-language reflection on full system trajectories
+- Maintains a Pareto frontier of high-performing candidates
+- Achieves sample-efficient adaptation with up to 35× fewer rollouts
+- Outperforms GRPO by ~10% on average and MIPROv2 by >10%
+
+For detailed technical information, see the [AI instructions](ai/instructions.md).
+
+## 🆘 Support
+
+- **Documentation**: [CLI Guide](CLI_DOCUMENTATION.md) | [Module Guide](MODULE_DOCUMENTATION.md)
+- **Issues**: [GitHub Issues](https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution/issues)
+- **Examples**: Check the `examples/` directory for working configurations
 
 ---
 
-### Contributing
-
-Contributions are welcome! Please open an issue to discuss your idea or a draft PR if you already have a prototype.
-
-- Fork the repo and create a feature branch.
-- Ensure `pnpm build`, `pnpm typecheck`, and `pnpm test` are green.
-- Follow Conventional Commits for PR titles/messages (e.g., `feat:`, `fix:`, `docs:`).
-- Keep code small and well-tested; add Jest tests for new behavior.
-
-See `CONTRIBUTING.md` for details.
-
----
-
-### License
-
-This project is licensed under the MIT License – see `LICENSE` for details.
-
----
-
-### Design notes
-
-- Maintains a Pareto frontier `S[k][i]` over a fixed Pareto subset for multi-objective robustness.
-- UCB1 bandit chooses mutation strategies by uplift; serializes state for resumability.
-- Optional holdout gating with epsilon tolerance reduces overfitting to the feedback minibatch.
-- Deterministic run folders and atomic writes provide reproducibility and crash safety.
+**Made with ❤️ for the AI community**
