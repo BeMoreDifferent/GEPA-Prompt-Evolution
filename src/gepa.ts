@@ -1,5 +1,5 @@
 import { selectCandidate } from './selection.js';
-import { proposeNewSystem, proposeNewModule, type JudgedExample, summarizeTraces } from './reflection.js';
+import { proposeNewModule, type JudgedExample, summarizeTraces } from './reflection.js';
 import { UCB1 } from './bandit.js';
 import { seedPopulation, type StrategyDef } from './seeding.js';
 import type {
@@ -56,9 +56,20 @@ export async function runGEPA_System(
   const logger: Logger = persist?.logger ?? silentLogger;
   logger.step('GEPA start', `budget=${budget}, pareto=${nPareto}, minibatch=${b}`);
 
+  // Validate inputs
+  if (dtrain.length === 0) {
+    throw new Error('Training data cannot be empty');
+  }
+  
+  if (budget < 10) {
+    throw new Error(`Budget too small: ${budget}. Need at least 10 for meaningful optimization.`);
+  }
+
   // Budget tracker: enabled and authoritative for decrements
   const startBudget = persist?.state?.budgetLeft ?? budget;
   const budgetTracker = new BudgetTracker(startBudget, true);
+  
+  logger.info(`Budget initialization: startBudget=${startBudget}, budget=${budget}, tracker.remaining()=${budgetTracker.remaining()}`);
 
   // Validate seed candidate
   validateCandidate(seed);
@@ -84,20 +95,36 @@ export async function runGEPA_System(
   if (state.DparetoIdx.length === 0 && state.DfbIdx.length === 0) {
     const idx = [...dtrain.keys()];
     for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
-    // Ensure at least one feedback item when possible
+    
+    // Ensure valid split with at least one feedback item
     const total = idx.length;
     const paretoEff = Math.min(nPareto, Math.max(1, total > 1 ? total - 1 : total));
     const holdMax = Math.max(0, total - paretoEff - 1);
     const holdEff = Math.min(holdoutSize, holdMax);
-    state.DparetoIdx = idx.slice(0, paretoEff);
-    state.DholdIdx   = idx.slice(paretoEff, paretoEff + holdEff);
-    state.DfbIdx     = idx.slice(paretoEff + holdEff);
+    const feedbackSize = total - paretoEff - holdEff;
+    
+    // Ensure we have at least one feedback item
+    if (feedbackSize < 1) {
+      logger.warn(`Adjusting split: feedback set would be empty. Reducing pareto from ${paretoEff} to ${Math.max(1, total - holdEff - 1)}`);
+      const adjustedPareto = Math.max(1, total - holdEff - 1);
+      state.DparetoIdx = idx.slice(0, adjustedPareto);
+      state.DholdIdx   = idx.slice(adjustedPareto, adjustedPareto + holdEff);
+      state.DfbIdx     = idx.slice(adjustedPareto + holdEff);
+    } else {
+      state.DparetoIdx = idx.slice(0, paretoEff);
+      state.DholdIdx   = idx.slice(paretoEff, paretoEff + holdEff);
+      state.DfbIdx     = idx.slice(paretoEff + holdEff);
+    }
+    
     state.budgetLeft = state.budgetLeft || budget;
   }
+  
   const Dpareto = state.DparetoIdx.map(i => dtrain[i]);
   const Dhold   = state.DholdIdx.map(i => dtrain[i]);
   let   Dfb     = state.DfbIdx.map(i => dtrain[i]);
+  
   logger.info(`Split: pareto=${Dpareto.length}, holdout=${Dhold.length}, feedback=${Dfb.length}`);
+  
   if (Dfb.length === 0 && Dpareto.length > 0) {
     // Fallback: reuse Pareto items as feedback for tiny datasets
     Dfb = [...Dpareto];
@@ -111,19 +138,27 @@ export async function runGEPA_System(
   // Helper to compute a Pareto row using configured scorer
   const scoreParetoRow = async (cand: Candidate): Promise<number[]> => {
     const row: number[] = [];
+    logger.debug(`Starting Pareto evaluation with budget: ${budgetTracker.remaining()}`);
     for (const item of Dpareto) {
-      if (!budgetTracker.canAfford(1)) break;
+      if (!budgetTracker.canAfford(1)) {
+        logger.debug(`Cannot afford Pareto evaluation, budget: ${budgetTracker.remaining()}`);
+        break;
+      }
       const { output, traces } = await execute({ candidate: cand, item });
       budgetTracker.dec(1, 'pareto:execute');
       if (scoreForPareto === 'mu') {
         row.push(mu(output, item.meta ?? null));
       } else {
-        if (mufCosts && !budgetTracker.canAfford(1)) break;
+        if (mufCosts && !budgetTracker.canAfford(1)) {
+          logger.debug(`Cannot afford Pareto judge, budget: ${budgetTracker.remaining()}`);
+          break;
+        }
         const f = await muf({ item, output, traces: traces ?? null });
         if (mufCosts) budgetTracker.dec(1, 'pareto:muf');
         row.push(f.score);
       }
     }
+    logger.debug(`Pareto evaluation complete, budget remaining: ${budgetTracker.remaining()}`);
     return row;
   };
 
@@ -132,6 +167,8 @@ export async function runGEPA_System(
     logger.step('Init Pareto row', `k=0 over ${Dpareto.length} items`);
     const row = await scoreParetoRow(P[0]);
     S.push(row);
+    // Update state budget after Pareto evaluation
+    state.budgetLeft = budgetTracker.remaining();
   }
 
   // Strategies + bandit
@@ -208,28 +245,48 @@ export async function runGEPA_System(
   if (!state.seeded && Dfb.length) {
     logger.step('Seeding population');
     const screen = Dfb.slice(0, Math.max(3, Math.floor(Dfb.length * 0.1)));
+    
+    // Calculate budget needed for seeding
+    const seedingCallsPerStrategy = screen.length * 2 + 1; // execute + judge + propose
+    const maxStrategies = Math.min(6, activeStrategies.length);
+    const totalSeedingCalls = seedingCallsPerStrategy * maxStrategies;
+    
     // Reserve budget for at least one full iteration (before+after judge calls)
-    const reserveCalls = Math.max(3, 2 * b);
-    const allowedForSeeding = budgetTracker.remaining() > reserveCalls ? (budgetTracker.remaining() - reserveCalls) : 0;
-    const seeded = await seedPopulation({
-      seed: { system: state.Psystems[0] }, screen, strategies: activeStrategies,
-      K: Math.min(6, activeStrategies.length), execute, muf, llm,
-      budgetLeft: allowedForSeeding,
-      mufCosts
-    });
-    // Precisely decrement by measured usedCalls
-    if (seeded.usedCalls > 0) budgetTracker.dec(seeded.usedCalls, 'seeding');
-    state.budgetLeft = budgetTracker.remaining();
-    for (const c of seeded.candidates.slice(1)) {
-      P.push(c);
-      state.Psystems.push(serializeCandidate(c));
-      const row = await scoreParetoRow(c);
-      S.push(row);
+    const iterationCalls = 2 * b + 2; // before execute + before judge + after execute + after judge + propose
+    const reserveCalls = Math.max(iterationCalls, 10); // At least 10 calls for meaningful optimization
+    
+    // Account for the fact that we already spent budget on Pareto evaluation
+    const currentBudget = budgetTracker.remaining();
+    const allowedForSeeding = Math.min(
+      currentBudget - reserveCalls,
+      totalSeedingCalls
+    );
+    
+    logger.info(`Budget check: current=${currentBudget}, seeding needs=${seedingCallsPerStrategy}, reserve=${reserveCalls}, allowed=${allowedForSeeding}`);
+    
+    if (allowedForSeeding < seedingCallsPerStrategy) {
+      logger.warn(`Insufficient budget for seeding (${allowedForSeeding} < ${seedingCallsPerStrategy}). Skipping seeding.`);
+    } else {
+      const seeded = await seedPopulation({
+        seed: { system: state.Psystems[0] }, screen, strategies: activeStrategies,
+        K: Math.min(6, activeStrategies.length), execute, muf, llm,
+        budgetLeft: allowedForSeeding,
+        mufCosts
+      });
+      // Precisely decrement by measured usedCalls
+      if (seeded.usedCalls > 0) budgetTracker.dec(seeded.usedCalls, 'seeding');
+      state.budgetLeft = budgetTracker.remaining();
+      for (const c of seeded.candidates.slice(1)) {
+        P.push(c);
+        state.Psystems.push(serializeCandidate(c));
+        const row = await scoreParetoRow(c);
+        S.push(row);
+      }
+      state.bestIdx = argmax(S.map(r => avg(r)));
+      state.seeded = true;
+      logger.info(`Seeded +${Math.max(0, seeded.candidates.length - 1)} candidates (screen=${screen.length}) calls=${seeded.usedCalls}`);
+      if (persist?.onCheckpoint) await persist.onCheckpoint(state, { iter: state.iter, seeded: true });
     }
-    state.bestIdx = argmax(S.map(r => avg(r)));
-    state.seeded = true;
-    logger.info(`Seeded +${Math.max(0, seeded.candidates.length - 1)} candidates (screen=${screen.length}) calls=${seeded.usedCalls}`);
-    if (persist?.onCheckpoint) await persist.onCheckpoint(state, { iter: state.iter, seeded: true });
   }
 
   // Helper: holdout average judge score
@@ -248,10 +305,14 @@ export async function runGEPA_System(
     return avg(scores);
   };
 
-  while (budgetTracker.remaining() > 0) {
+  // Main optimization loop
+  let iterationsRun = 0;
+  const maxIterations = Math.floor(budget / (2 * b + 2)); // Conservative estimate
+  
+  while (budgetTracker.remaining() > 0 && iterationsRun < maxIterations) {
     const k = selectCandidate(P, S);
     const parent = P[k];
-    logger.step(`Iter ${state.iter + 1}`, `pick k=${k}`);
+    logger.step(`Iter ${state.iter + 1}`, `pick k=${k} (budget left: ${budgetTracker.remaining()})`);
 
     // Minibatch over feedback set
     const M = sampleMinibatch(Dfb, b);
@@ -405,7 +466,7 @@ export async function runGEPA_System(
     const reward = Math.max(0, Math.min(1, (sigmaP - sigma + 1) / 2));
     if (!doNoHint) bandit.update(chosenId, reward);
     pushUplift(sigmaP - sigma);
-    logger.info(`Uplift: before=${sigma.toFixed(3)} after=${sigmaP.toFixed(3)} reward=${reward.toFixed(3)} budgetLeft=${state.budgetLeft}`);
+    logger.info(`Uplift: before=${sigma.toFixed(3)} after=${sigmaP.toFixed(3)} reward=${reward.toFixed(3)} budgetLeft=${budgetTracker.remaining()}`);
 
     // If improvements are slowing down, consider re-prefiltering the strategy set
     if (recentAvgUplift() <= scheduleOpts.slowdownThreshold && (state.iter - lastPrefilterIter) >= reprefilterCooldown) {
@@ -490,9 +551,11 @@ export async function runGEPA_System(
     }
     state.bandit = bandit.serialize();
     state.budgetLeft = budgetTracker.remaining();
+    
+    iterationsRun++;
   }
 
-  logger.step('GEPA done', `bestIdx=${state.bestIdx}`);
+  logger.step('GEPA done', `bestIdx=${state.bestIdx} iterations=${iterationsRun} budgetUsed=${startBudget - budgetTracker.remaining()}`);
   return P[state.bestIdx];
 }
 

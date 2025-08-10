@@ -10,6 +10,72 @@ import { createLogger, type LogLevel } from './logger.js';
 import { concatenateModules } from './modules.js';
 
 /**
+ * Validate configuration and provide helpful error messages
+ */
+function validateConfig(config: Record<string, unknown>, dtrainLength: number): void {
+  const errors: string[] = [];
+  
+  // Validate budget
+  const budget = Number(config['budget'] ?? 100);
+  if (!Number.isFinite(budget) || budget < 10) {
+    errors.push(`Budget must be at least 10 (got: ${budget}). Recommended: 50-200 for meaningful optimization.`);
+  }
+  
+  // Validate data split
+  const paretoSize = Number(config['paretoSize'] ?? Math.max(4, Math.floor(dtrainLength / 5)));
+  const holdoutSize = Number(config['holdoutSize'] ?? 0);
+  const minibatchSize = Number(config['minibatchSize'] ?? 4);
+  
+  if (paretoSize + holdoutSize >= dtrainLength) {
+    errors.push(`Data split impossible: paretoSize=${paretoSize} + holdoutSize=${holdoutSize} >= total prompts=${dtrainLength}. Need at least 1 prompt for feedback.`);
+  }
+  
+  if (minibatchSize > dtrainLength - paretoSize - holdoutSize) {
+    errors.push(`Minibatch size (${minibatchSize}) too large for available feedback prompts (${dtrainLength - paretoSize - holdoutSize}).`);
+  }
+  
+  if (paretoSize < 1) {
+    errors.push(`Pareto size must be at least 1 (got: ${paretoSize}).`);
+  }
+  
+  // Validate models
+  const actorModel = String(config['actorModel'] ?? 'gpt-5-mini');
+  const judgeModel = String(config['judgeModel'] ?? 'gpt-5-mini');
+  
+  if (!actorModel || !judgeModel) {
+    errors.push('Both actorModel and judgeModel must be specified.');
+  }
+  
+  if (errors.length > 0) {
+    throw new Error(`Configuration validation failed:\n${errors.map(e => `  - ${e}`).join('\n')}`);
+  }
+}
+
+/**
+ * Apply sensible defaults to configuration
+ */
+function applyDefaults(config: Record<string, unknown>, dtrainLength: number): Record<string, unknown> {
+  const defaults = {
+    actorModel: 'gpt-5-mini',
+    judgeModel: 'gpt-5-mini',
+    budget: Math.max(50, dtrainLength * 3), // At least 3 iterations per prompt
+    minibatchSize: Math.min(4, Math.max(1, Math.floor(dtrainLength / 4))),
+    paretoSize: Math.max(2, Math.floor(dtrainLength / 3)),
+    holdoutSize: Math.max(0, Math.floor(dtrainLength / 6)),
+    epsilonHoldout: 0.02,
+    actorTemperature: 0.4,
+    actorMaxTokens: 512,
+    rubric: 'Correctness, coverage, safety, brevity.',
+    strategiesPath: DEFAULT_STRATEGIES_PATH,
+    scoreForPareto: 'muf',
+    mufCosts: true,
+    crossoverProb: 0
+  };
+  
+  return { ...defaults, ...config };
+}
+
+/**
  * Parse input with support for new format: { system?: string, modules?: [{id,prompt}], prompts: [...] }
  * Validates input structure and handles fallbacks
  */
@@ -69,8 +135,74 @@ function parseArgs(argv: string[]): Record<string, string> {
   return out;
 }
 
+function printHelp(): void {
+  console.log(`
+GEPA Prompt Optimizer
+
+Usage: gepa [options]
+
+Required Options:
+  --input <file>           Input JSON file with prompts and system/modules
+  --config <file>          Configuration JSON file
+  --api-key <key>          OpenAI API key (or set OPENAI_API_KEY env var)
+
+Optional Options:
+  --runs-root <dir>        Directory for run outputs (default: runs)
+  --resume <dir>           Resume from a previous run directory
+  --out <file>             Output file for best system prompt
+  --log                    Enable logging
+  --log-level <level>      Log level: debug, info, warn, error (default: info)
+
+Input Format:
+  {
+    "system": "Your system prompt",
+    "prompts": [
+      {"id": "1", "user": "User question 1"},
+      {"id": "2", "user": "User question 2"}
+    ]
+  }
+
+  OR for modular systems:
+  {
+    "modules": [
+      {"id": "intro", "prompt": "Introduction module"},
+      {"id": "main", "prompt": "Main module"}
+    ],
+    "prompts": [...]
+  }
+
+Configuration Options:
+  actorModel              OpenAI model for execution (default: gpt-5-mini)
+  judgeModel              OpenAI model for evaluation (default: gpt-5-mini)
+  budget                  Total LLM calls allowed (default: 50+)
+  minibatchSize           Feedback batch size (default: 4)
+  paretoSize              Pareto evaluation size (default: 2+)
+  holdoutSize             Holdout evaluation size (default: 0)
+  epsilonHoldout          Holdout improvement threshold (default: 0.02)
+  actorTemperature        Execution temperature (default: 0.4)
+  actorMaxTokens          Max tokens for execution (default: 512)
+  rubric                  Evaluation criteria (default: "Correctness, coverage, safety, brevity.")
+  strategiesPath          Path to strategies file (default: strategies/strategies.json)
+  scoreForPareto          Scoring method: "mu" or "muf" (default: "muf")
+  mufCosts                Whether judge calls count toward budget (default: true)
+  crossoverProb           Probability of crossover vs mutation (default: 0)
+
+Examples:
+  gepa --input examples/input.math.prompts.json --config examples/config.json --api-key sk-...
+  gepa --input input.json --config config.json --log --log-level debug
+  gepa --resume runs/2024-01-01T12-00-00Z-my-run
+`);
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  
+  // Handle help
+  if (args.help || args.h) {
+    printHelp();
+    return;
+  }
+  
   const runsRoot = args['runs-root'] || 'runs';
   const resumeDir = args.resume && args.resume !== 'true' ? args.resume : null;
   const logEnabled = args.log !== undefined && args.log !== 'false';
@@ -86,13 +218,21 @@ async function main(): Promise<void> {
       runCtx = await resumeRun(resumeDir);
       unlock = await acquireLock(runCtx.runDir);
     } else {
-      if (!args.input || !args.config) { console.error('Missing --input or --config'); process.exit(1); }
+      if (!args.input || !args.config) { 
+        console.error('Missing --input or --config. Use --help for usage information.'); 
+        process.exit(1); 
+      }
       
       // Parse input with support for new format: { system?: string, modules?: [{id,prompt}], prompts: [...] }
       const inputRaw = JSON.parse(await fs.readFile(args.input, 'utf8')) as Record<string, unknown>;
       const input = parseInput(inputRaw);
       
-      const config = JSON.parse(await fs.readFile(args.config, 'utf8')) as Record<string, unknown>;
+      const configRaw = JSON.parse(await fs.readFile(args.config, 'utf8')) as Record<string, unknown>;
+      
+      // Apply defaults and validate
+      const config = applyDefaults(configRaw, input.prompts.length);
+      validateConfig(config, input.prompts.length);
+      
       const outPath = args.out ? path.resolve(args.out) : null;
       runCtx = await initRun({ runsRoot, inputObj: { ...input, originalInput: inputRaw }, configObj: config, outFile: outPath });
       logger.step('Init run', runCtx.runDir);
@@ -103,9 +243,15 @@ async function main(): Promise<void> {
     const config = (runCtx as any).configObj ?? JSON.parse(await fs.readFile(path.join(runCtx.runDir, 'config.json'), 'utf8'));
 
     const cliApiKey = args['api-key'] && args['api-key'] !== 'true' ? String(args['api-key']) : undefined;
+    const apiKey = cliApiKey || process.env.OPENAI_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error('OpenAI API key required. Set --api-key or OPENAI_API_KEY environment variable.');
+    }
+    
     logger.info('Building OpenAI clients');
     const { actorLLM, chatLLM } = makeOpenAIClients({
-      ...(cliApiKey ? { apiKey: cliApiKey } : process.env.OPENAI_API_KEY ? { apiKey: process.env.OPENAI_API_KEY } : {}),
+      apiKey,
       actorModel: String(config['actorModel'] ?? 'gpt-5-mini'),
       judgeModel: String(config['judgeModel'] ?? 'gpt-5-mini'),
       temperature: Number(config['actorTemperature'] ?? 0.4),
@@ -171,14 +317,22 @@ async function main(): Promise<void> {
     }, { state: (runCtx as any).state, onCheckpoint, logger });
 
     // Print final best to stdout
-    console.log(best.system);
+    const bestOutput = best.system || (best.modules ? concatenateModules(best) : '');
+    console.log(bestOutput);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Error: ${message}`);
+    if (logEnabled && logLevel === 'debug') {
+      console.error(error instanceof Error ? error.stack : '');
+    }
+    process.exit(1);
   } finally {
     if (unlock) await unlock();
   }
 }
 
 // Export for tests
-export { parseArgs, main, parseInput };
+export { parseArgs, main, parseInput, validateConfig, applyDefaults, printHelp };
 
 // Run when invoked directly (not when imported by tests)
 if (import.meta.url === `file://${process.argv[1]}`) {

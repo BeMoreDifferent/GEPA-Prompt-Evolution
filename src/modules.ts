@@ -139,8 +139,7 @@ export function mergeCandidates(
   lineageA: number[],
   lineageB: number[],
   scoreA: number,
-  scoreB: number,
-  baseCandidate?: Candidate
+  scoreB: number
 ): Candidate {
   // Check for incompatible structures first
   if ((isSingleSystem(parentA) && isModular(parentB)) || (isModular(parentA) && isSingleSystem(parentB))) {

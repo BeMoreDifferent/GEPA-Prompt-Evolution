@@ -1,213 +1,116 @@
-import { jest } from '@jest/globals';
+import { validateConfig, applyDefaults, parseInput } from '../src/cli.js';
 
-// Mock dependencies
-jest.mock('../src/gepa.js');
-jest.mock('../src/llm_openai.js');
-jest.mock('../src/judge.js');
-jest.mock('../src/persist.js');
-jest.mock('node:fs/promises');
-jest.mock('node:path');
-
-describe('CLI config parsing and fallbacks', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
-  describe('config key parsing', () => {
-    test('parses scoreForPareto config key correctly', () => {
+describe('CLI Configuration', () => {
+  describe('validateConfig', () => {
+    it('should pass with valid configuration', () => {
       const config = {
-        budget: 10,
-        minibatchSize: 2,
+        budget: 50,
         paretoSize: 2,
-        scoreForPareto: 'mu'
+        holdoutSize: 0,
+        minibatchSize: 2,
+        actorModel: 'gpt-5-mini',
+        judgeModel: 'gpt-5-mini'
       };
-
-      // Test the logic that would be used in CLI
-      const scoreForPareto = config.scoreForPareto === 'mu' ? 'mu' as const : 'muf' as const;
-      expect(scoreForPareto).toBe('mu');
+      expect(() => validateConfig(config, 4)).not.toThrow();
     });
 
-    test('parses mufCosts config key correctly', () => {
-      const config = {
-        budget: 10,
-        minibatchSize: 2,
-        paretoSize: 2,
-        mufCosts: false
-      };
-
-      // Test the logic that would be used in CLI
-      const mufCosts = config.mufCosts === undefined ? true : Boolean(config.mufCosts);
-      expect(mufCosts).toBe(false);
+    it('should reject budget too small', () => {
+      const config = { budget: 5 };
+      expect(() => validateConfig(config, 4)).toThrow('Budget must be at least 10');
     });
 
-    test('parses crossoverProb config key correctly', () => {
-      const config = {
-        budget: 10,
-        minibatchSize: 2,
-        paretoSize: 2,
-        crossoverProb: 0.3
-      };
-
-      // Test the logic that would be used in CLI
-      const crossoverProbability = Number(config.crossoverProb ?? 0);
-      expect(crossoverProbability).toBe(0.3);
+    it('should reject impossible data split', () => {
+      const config = { paretoSize: 3, holdoutSize: 2 };
+      expect(() => validateConfig(config, 4)).toThrow('Data split impossible');
     });
 
-    test('uses default values when config keys are missing', () => {
-      const config: Record<string, unknown> = {
-        budget: 10,
-        minibatchSize: 2,
-        paretoSize: 2
-        // Missing scoreForPareto, mufCosts, crossoverProb
-      };
-
-      // Test the logic that would be used in CLI
-      const scoreForPareto = config.scoreForPareto === 'mu' ? 'mu' as const : 'muf' as const;
-      const mufCosts = config.mufCosts === undefined ? true : Boolean(config.mufCosts);
-      const crossoverProbability = Number(config.crossoverProb ?? 0);
-
-      expect(scoreForPareto).toBe('muf'); // Default to judge
-      expect(mufCosts).toBe(true); // Default to true
-      expect(crossoverProbability).toBe(0); // Default to 0
+    it('should reject minibatch too large', () => {
+      const config = { paretoSize: 2, holdoutSize: 1, minibatchSize: 2 };
+      expect(() => validateConfig(config, 4)).toThrow('Minibatch size (2) too large');
     });
 
-    test('handles all new config keys together', () => {
-      const config = {
-        budget: 10,
-        minibatchSize: 2,
-        paretoSize: 2,
-        scoreForPareto: 'mu',
-        mufCosts: false,
-        crossoverProb: 0.25
-      };
+    it('should reject zero pareto size', () => {
+      const config = { paretoSize: 0 };
+      expect(() => validateConfig(config, 4)).toThrow('Pareto size must be at least 1');
+    });
 
-      // Test the logic that would be used in CLI
-      const scoreForPareto = config.scoreForPareto === 'mu' ? 'mu' as const : 'muf' as const;
-      const mufCosts = config.mufCosts === undefined ? true : Boolean(config.mufCosts);
-      const crossoverProbability = Number(config.crossoverProb ?? 0);
-
-      expect(scoreForPareto).toBe('mu');
-      expect(mufCosts).toBe(false);
-      expect(crossoverProbability).toBe(0.25);
+    it('should reject missing models', () => {
+      const config = { actorModel: '', judgeModel: '' };
+      expect(() => validateConfig(config, 4)).toThrow('Both actorModel and judgeModel must be specified');
     });
   });
 
-  describe('config validation', () => {
-    test('validates scoreForPareto values', () => {
-      const config = {
-        budget: 10,
-        minibatchSize: 2,
-        paretoSize: 2,
-        scoreForPareto: 'invalid' // Invalid value
-      };
-
-      // Test the logic that would be used in CLI
-      const scoreForPareto = config.scoreForPareto === 'mu' ? 'mu' as const : 'muf' as const;
+  describe('applyDefaults', () => {
+    it('should apply sensible defaults for small dataset', () => {
+      const config = {};
+      const result = applyDefaults(config, 4);
       
-      // Should fall back to default 'muf' when invalid value is provided
-      expect(scoreForPareto).toBe('muf');
+      expect(result.budget).toBeGreaterThanOrEqual(50);
+      expect(result.minibatchSize).toBeLessThanOrEqual(4);
+      expect(result.paretoSize).toBeGreaterThanOrEqual(2);
+      expect(result.holdoutSize).toBeGreaterThanOrEqual(0);
+      expect(result.actorModel).toBe('gpt-5-mini');
+      expect(result.judgeModel).toBe('gpt-5-mini');
     });
 
-    test('validates crossoverProb range', () => {
-      const config = {
-        budget: 10,
-        minibatchSize: 2,
-        paretoSize: 2,
-        crossoverProb: 1.5 // Invalid: should be between 0 and 1
-      };
-
-      // Test the logic that would be used in CLI
-      const crossoverProbability = Number(config.crossoverProb ?? 0);
+    it('should respect provided values', () => {
+      const config = { budget: 100, actorModel: 'gpt-4' };
+      const result = applyDefaults(config, 4);
       
-      // Should use the value as-is (validation happens in GEPA core)
-      expect(crossoverProbability).toBe(1.5);
+      expect(result.budget).toBe(100);
+      expect(result.actorModel).toBe('gpt-4');
+      expect(result.judgeModel).toBe('gpt-5-mini'); // default
     });
 
-    test('handles string values for numeric configs', () => {
-      const config = {
-        budget: 10,
-        minibatchSize: 2,
-        paretoSize: 2,
-        crossoverProb: '0.5' // String value
-      };
-
-      // Test the logic that would be used in CLI
-      const crossoverProbability = Number(config.crossoverProb ?? 0);
+    it('should scale budget with dataset size', () => {
+      const config = {};
+      const result10 = applyDefaults(config, 10);
+      const result20 = applyDefaults(config, 20);
       
-      expect(crossoverProbability).toBe(0.5);
-    });
-
-    test('handles boolean values for mufCosts', () => {
-      const config = {
-        budget: 10,
-        minibatchSize: 2,
-        paretoSize: 2,
-        mufCosts: 'false' // String value
-      };
-
-      // Test the logic that would be used in CLI
-      const mufCosts = config.mufCosts === undefined ? true : Boolean(config.mufCosts);
-      
-      expect(mufCosts).toBe(true); // Boolean('false') is true, so we need explicit conversion
+      expect(Number(result20.budget)).toBeGreaterThan(Number(result10.budget));
     });
   });
 
-  describe('backward compatibility', () => {
-    test('maintains backward compatibility with old config format', () => {
-      const config: Record<string, unknown> = {
-        budget: 10,
-        minibatchSize: 2,
-        paretoSize: 2,
-        actorModel: 'gpt-4',
-        judgeModel: 'gpt-4',
-        rubric: 'Correctness and clarity.'
-        // No new config keys
+  describe('parseInput', () => {
+    it('should parse system prompt format', () => {
+      const input = {
+        system: 'You are a helpful assistant',
+        prompts: [{ id: '1', user: 'Hello' }]
       };
-
-      // Test the logic that would be used in CLI
-      const scoreForPareto = config.scoreForPareto === 'mu' ? 'mu' as const : 'muf' as const;
-      const mufCosts = config.mufCosts === undefined ? true : Boolean(config.mufCosts);
-      const crossoverProbability = Number(config.crossoverProb ?? 0);
-
-      // Verify that old config keys still work
-      expect(config.budget).toBe(10);
-      expect(config.minibatchSize).toBe(2);
-      expect(config.paretoSize).toBe(2);
-
-      // Verify that new config keys have sensible defaults
-      expect(scoreForPareto).toBe('muf');
-      expect(mufCosts).toBe(true);
-      expect(crossoverProbability).toBe(0);
+      const result = parseInput(input);
+      expect(result.system).toBe('You are a helpful assistant');
+      expect(result.prompts).toHaveLength(1);
     });
 
-    test('handles mixed old and new config keys', () => {
-      const config: Record<string, unknown> = {
-        budget: 10,
-        minibatchSize: 2,
-        paretoSize: 2,
-        actorModel: 'gpt-4',
-        judgeModel: 'gpt-4',
-        rubric: 'Correctness and clarity.',
-        scoreForPareto: 'mu',
-        mufCosts: false,
-        crossoverProb: 0.1
+    it('should parse modules format', () => {
+      const input = {
+        modules: [
+          { id: 'intro', prompt: 'Introduction' },
+          { id: 'main', prompt: 'Main content' }
+        ],
+        prompts: [{ id: '1', user: 'Hello' }]
       };
+      const result = parseInput(input);
+      expect(result.system).toBe('Introduction\n\nMain content');
+      expect(result.prompts).toHaveLength(1);
+    });
 
-      // Test the logic that would be used in CLI
-      const scoreForPareto = config.scoreForPareto === 'mu' ? 'mu' as const : 'muf' as const;
-      const mufCosts = config.mufCosts === undefined ? true : Boolean(config.mufCosts);
-      const crossoverProbability = Number(config.crossoverProb ?? 0);
+    it('should reject missing prompts', () => {
+      const input = { system: 'test' };
+      expect(() => parseInput(input)).toThrow('Input must contain a "prompts" array');
+    });
 
-      // Verify that both old and new config keys work together
-      expect(config.budget).toBe(10);
-      expect(config.actorModel).toBe('gpt-4');
-      expect(scoreForPareto).toBe('mu');
-      expect(mufCosts).toBe(false);
-      expect(crossoverProbability).toBe(0.1);
+    it('should reject missing system and modules', () => {
+      const input = { prompts: [] };
+      expect(() => parseInput(input)).toThrow('Input must contain either "system" or "modules"');
+    });
+
+    it('should validate module structure', () => {
+      const input = {
+        modules: [{ id: 'test' }], // missing prompt
+        prompts: []
+      };
+      expect(() => parseInput(input)).toThrow('Each module must have a string "prompt"');
     });
   });
 });

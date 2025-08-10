@@ -80,9 +80,10 @@ export async function initRun(args: {
   await writeJsonAtomic(path.join(runDir, 'config.json'), args.configObj);
   if (args.outFile) await atomicWrite(path.join(runDir, '.outpath'), args.outFile);
 
+  const budget = Number(args.configObj['budget'] ?? 100);
   const state: GEPAState = {
     version: 2,
-    budgetLeft: 0,
+    budgetLeft: budget,
     iter: 0,
     Psystems: [String(args.inputObj['system'] ?? '')],
     S: [],
