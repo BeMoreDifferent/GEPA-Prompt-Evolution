@@ -1,5 +1,8 @@
 ### GEPA Prompt Evolution (GEPA-SPO)
 
+[![npm version](https://img.shields.io/npm/v/gepa-spo.svg)](https://www.npmjs.com/package/gepa-spo)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Genetic-Pareto prompt optimizer to evolve system prompts from a few rollouts. GEPA performs natural-language reflection over full trajectories, mutates the system prompt with multiple strategies, and maintains a Pareto frontier rather than collapsing to a single candidate. A simple UCB1 bandit selects mutation strategies by observed uplift, with optional holdout gating to prevent regressions.
 
 This repository provides:
@@ -10,11 +13,24 @@ This repository provides:
 
 ---
 
-### Installation
+### Installation & usage
 
 ```bash
-pnpm install
-pnpm build
+# Run via npx (no install). Requires Node >= 18
+export OPENAI_API_KEY=...  # or pass --api-key
+
+# Using npm
+npx gepa-spo --runs-root ./runs \
+  --input /absolute/path/to/input.json \
+  --config /absolute/path/to/config.json
+
+# Using pnpm
+pnpm dlx gepa-spo --runs-root ./runs \
+  --input /absolute/path/to/input.json \
+  --config /absolute/path/to/config.json
+
+# Optional: local install for development
+pnpm install && pnpm build
 ```
 
 Environment:
@@ -28,34 +44,34 @@ Security and privacy:
 
 ### Quick start (CLI)
 
-The CLI binary is `gepa-spo` (installed from the local checkout via `pnpm build`):
+The CLI binary is `gepa-spo` and is available via `npx` or `pnpm dlx`:
 
 ```bash
-# Minimal demo using the provided examples
-pnpm build && node dist/cli.js \
-  --runs-root ./runs-test/demo \
-  --input ./examples/input.min.prompts.json \
-  --config ./examples/config.min.json \
+# Minimal run (provide your own input/config JSON files)
+npx gepa-spo \
+  --runs-root ./runs \
+  --input /absolute/path/to/input.json \
+  --config /absolute/path/to/config.json \
   --log --log-level debug
 
-# Or use the npm bin name if linked/installed
-# gepa-spo --runs-root ./runs-test/demo --input ./examples/input.min.prompts.json --config ./examples/config.min.json
+# pnpm users can also run
+# pnpm dlx gepa-spo --runs-root ./runs --input /abs/path/input.json --config /abs/path/config.json
 ```
 
 On success, the best evolved system prompt is printed to stdout and persisted under the run directory. To write the best prompt to a specific file:
 
 ```bash
-pnpm build && node dist/cli.js \
-  --runs-root ./runs-test/demo \
-  --input ./examples/input.min.prompts.json \
-  --config ./examples/config.min.json \
-  --out ./runs-test/demo/best.txt
+npx gepa-spo \
+  --runs-root ./runs \
+  --input /absolute/path/to/input.json \
+  --config /absolute/path/to/config.json \
+  --out ./runs/best.txt
 ```
 
 Resume a previous run:
 
 ```bash
-node dist/cli.js --resume /absolute/path/to/runs/<run-folder>
+npx gepa-spo --resume /absolute/path/to/runs/<run-folder>
 ```
 
 CLI flags:
@@ -177,9 +193,10 @@ The CLI holds an exclusive lock file during a run to avoid concurrent writers.
 ### Programmatic API (TypeScript)
 
 ```ts
-import { runGEPA_System } from './src/gepa.js';
-import { makeOpenAIClients } from './src/llm_openai.js';
-import type { Candidate, TaskItem, GepaOptions, MetricMu, FeedbackMuF } from './src/types.js';
+// When installed as a package, import from the built output
+import { runGEPA_System } from 'gepa-spo/dist/gepa.js';
+import { makeOpenAIClients } from 'gepa-spo/dist/llm_openai.js';
+import type { Candidate, TaskItem, GepaOptions, MetricMu, FeedbackMuF } from 'gepa-spo/dist/types.js';
 
 const input = {
   system: 'You are a helpful assistant. Be concise.',

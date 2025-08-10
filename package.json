@@ -27,12 +27,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/daniel/GEPA-Prompt-Evolution.git"
+    "url": "git+https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution.git"
   },
   "bugs": {
-    "url": "https://github.com/daniel/GEPA-Prompt-Evolution/issues"
+    "url": "https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution/issues"
   },
-  "homepage": "https://github.com/daniel/GEPA-Prompt-Evolution#readme",
+  "homepage": "https://github.com/BeMoreDifferent/GEPA-Prompt-Evolution#readme",
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "^22.5.0",
