@@ -78,5 +78,105 @@
     {
         "id": "design-critique",
         "hint": "When giving designs, add quick critique: hierarchy, contrast, spacing, typography; suggest 2 iterations."
+    },
+    {
+        "id": "first-principles",
+        "hint": "Reduce to primitives; identify governing constraints; rebuild solution from basics; quantify assumptions."
+    },
+    {
+        "id": "triz-contradictions",
+        "hint": "Formulate technical contradiction; consult TRIZ principles/contradiction matrix for resolution patterns; propose 2–3 candidate transforms."
+    },
+    {
+        "id": "ooda-loop",
+        "hint": "For fast-changing/adversarial contexts, iterate OODA: Observe, Orient, Decide, Act; shorten loop via small probes; adapt on feedback."
+    },
+    {
+        "id": "cynefin-sensemaking",
+        "hint": "Classify context (obvious/complicated/complex/chaotic); choose matching approach (best practice/expert analysis/safe‑to‑fail probes/act‑sense‑respond)."
+    },
+    {
+        "id": "toc-bottleneck",
+        "hint": "Identify system constraint; exploit, subordinate, elevate; repeat; optimise only at bottleneck."
+    },
+    {
+        "id": "rca-5whys-fishbone",
+        "hint": "Do root cause analysis: map causes via Ishikawa categories, then drive 5 Whys on the dominant branch; verify cause with a test."
+    },
+    {
+        "id": "premortem-redteam",
+        "hint": "Run premortem: assume failure, list reasons, rank by likelihood/impact; assign countermeasures; invite a red‑team critique."
+    },
+    {
+        "id": "mcda-ahp",
+        "hint": "When multiple criteria/stakeholders, use AHP: define hierarchy, pairwise compare, compute weights/consistency ratio, score options."
+    },
+    {
+        "id": "decision-tree-ev",
+        "hint": "Map decision tree; attach probabilities/payoffs; compute expected value/utility; choose max EV; consider EVPI to bound research value."
+    },
+    {
+        "id": "backcasting",
+        "hint": "Start from desired end‑state; work backward to milestones, policy/tech enablers; derive near‑term actions."
+    },
+    {
+        "id": "systems-cld",
+        "hint": "Sketch causal loop diagram; identify reinforcing/balancing loops; locate leverage points; design interventions."
+    },
+    {
+        "id": "dp-optimal-substructure",
+        "hint": "If overlapping subproblems/optimal substructure, define recurrence, memoize/tabulate; verify correctness by induction."
+    },
+    {
+        "id": "invariants-induction",
+        "hint": "Prove or design via invariants/monovariants; state invariant, base case, preservation, termination; use for algorithm or safety proofs."
+    },
+    {
+        "id": "branch-and-bound",
+        "hint": "For combinatorial search, define bounds and branching; prune dominated regions; record incumbent; stop on proof of optimality."
+    },
+    {
+        "id": "fmea",
+        "hint": "Before launch, list failure modes/effects; rate severity, occurrence, detection; compute risk priority number; mitigate top items."
+    },
+    {
+        "id": "design-of-experiments",
+        "hint": "Use DOE for learning: define factors/responses; choose design (full/fractional/orthogonal); run randomized/blocked; analyze effects."
+    },
+    {
+        "id": "monte-carlo",
+        "hint": "Quantify uncertainty: define input distributions; run Monte Carlo; report mean, intervals; highlight tail risks."
+    },
+    {
+        "id": "sensitivity-analysis",
+        "hint": "Test model robustness: OAT/local; global (Sobol/variance-based); report most influential inputs."
+    },
+    {
+        "id": "value-of-information",
+        "hint": "Compute EVPI/EVSI to decide if more data is worth it; if value < cost/time, proceed without further research."
+    },
+    {
+        "id": "causal-dag",
+        "hint": "Draw DAG; identify confounders; apply backdoor/frontdoor criteria; specify causal estimand; avoid conditioning on colliders."
+    },
+    {
+        "id": "lean-startup-bml",
+        "hint": "For product uncertainty, run Build–Measure–Learn loops; define MVP + falsifiable hypotheses; pivot/persevere based on evidence."
+    },
+    {
+        "id": "jobs-to-be-done",
+        "hint": "Define user job, context, struggles; design solution to be ‘hired’ for that job; validate with outcome statements."
+    },
+    {
+        "id": "property-based-testing",
+        "hint": "For code, specify properties/invariants; auto-generate diverse cases incl. edge; shrink counterexamples."
+    },
+    {
+        "id": "mape-k-control-loop",
+        "hint": "For operational systems, set up MAPE-K loop: Monitor→Analyze→Plan→Execute on Knowledge; define SLOs and automated actions."
+    },
+    {
+        "id": "lagrangian-relaxation",
+        "hint": "If constraints complicate optimization, relax with multipliers to get tractable subproblem; use dual bounds; iterate on multipliers."
     }
 ]
