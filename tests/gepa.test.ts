@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 import { runGEPA_System } from '../src/gepa.js';
-import type { Candidate, TaskItem, GepaOptions } from '../src/types.js';
+import type { Candidate, TaskItem, GepaOptions, SystemExecute, FeedbackMuF, LLM } from '../src/types.js';
 
 // Mock dependencies
 jest.mock('../src/llm_openai.js');
@@ -18,16 +18,18 @@ describe('runGEPA_System', () => {
 
   it('returns a candidate with a system string', async () => {
     // Mock the reflection module
-    const mockProposeNewModule = jest.fn().mockResolvedValue({ system: 'Improved.' });
+    const mockProposeNewModule = async () => ({ system: 'Improved.' });
     jest.doMock('../src/reflection.js', () => ({
       proposeNewModule: mockProposeNewModule,
-      summarizeTraces: jest.fn().mockReturnValue('mock trace')
+      summarizeTraces: () => 'mock trace'
     }));
 
     // Mock the strategy module
     jest.doMock('../src/strategy.js', () => ({
-      prefilterStrategies: jest.fn().mockResolvedValue({
-        kept: [{ id: 'test-strategy', hint: 'Test hint' }]
+      prefilterStrategies: async () => ({
+        kept: [{ id: 'test-strategy', hint: 'Test hint' }],
+        scores: {},
+        raw: ''
       })
     }));
 
@@ -55,18 +57,18 @@ describe('runGEPA_System', () => {
       { id: '20', user: 'Restore this system', meta: null }
     ];
 
-    const execute = jest.fn().mockResolvedValue({
+    const execute: SystemExecute = async () => ({
       output: 'Mock response',
       traces: { system: 'Mock system' }
     });
 
-    const muf = jest.fn().mockResolvedValue({
+    const muf: FeedbackMuF = async () => ({
       score: 0.6,
       feedbackText: 'Good response'
     });
 
-    const llm = {
-      complete: jest.fn().mockResolvedValue('Mock completion')
+    const llm: LLM = {
+      complete: async () => 'Mock completion'
     };
 
     const options: GepaOptions = {
@@ -89,16 +91,18 @@ describe('runGEPA_System', () => {
 
   it('optimizes when feedback is available (accept child)', async () => {
     // Mock the reflection module
-    const mockProposeNewModule = jest.fn().mockResolvedValue({ system: 'Improved.' });
+    const mockProposeNewModule = async () => ({ system: 'Improved.' });
     jest.doMock('../src/reflection.js', () => ({
       proposeNewModule: mockProposeNewModule,
-      summarizeTraces: jest.fn().mockReturnValue('mock trace')
+      summarizeTraces: () => 'mock trace'
     }));
 
     // Mock the strategy module
     jest.doMock('../src/strategy.js', () => ({
-      prefilterStrategies: jest.fn().mockResolvedValue({
-        kept: [{ id: 'test-strategy', hint: 'Test hint' }]
+      prefilterStrategies: async () => ({
+        kept: [{ id: 'test-strategy', hint: 'Test hint' }],
+        scores: {},
+        raw: ''
       })
     }));
 
@@ -112,18 +116,18 @@ describe('runGEPA_System', () => {
       { id: '6', user: 'Solve this equation', meta: null }
     ];
 
-    const execute = jest.fn().mockResolvedValue({
+    const execute: SystemExecute = async () => ({
       output: 'Mock response',
       traces: { system: 'Mock system' }
     });
 
-    const muf = jest.fn().mockResolvedValue({
+    const muf: FeedbackMuF = async () => ({
       score: 0.8, // Higher score to trigger acceptance
       feedbackText: 'Good response'
     });
 
-    const llm = {
-      complete: jest.fn().mockResolvedValue('Mock completion')
+    const llm: LLM = {
+      complete: async () => 'Mock completion'
     };
 
     const options: GepaOptions = {
@@ -147,16 +151,18 @@ describe('runGEPA_System', () => {
 
   it('stagnation triggers re-prefilter without crashing', async () => {
     // Mock the reflection module
-    const mockProposeNewModule = jest.fn().mockResolvedValue({ system: 'Improved.' });
+    const mockProposeNewModule = async () => ({ system: 'Improved.' });
     jest.doMock('../src/reflection.js', () => ({
       proposeNewModule: mockProposeNewModule,
-      summarizeTraces: jest.fn().mockReturnValue('mock trace')
+      summarizeTraces: () => 'mock trace'
     }));
 
     // Mock the strategy module
     jest.doMock('../src/strategy.js', () => ({
-      prefilterStrategies: jest.fn().mockResolvedValue({
-        kept: [{ id: 'test-strategy', hint: 'Test hint' }]
+      prefilterStrategies: async () => ({
+        kept: [{ id: 'test-strategy', hint: 'Test hint' }],
+        scores: {},
+        raw: ''
       })
     }));
 
@@ -170,18 +176,18 @@ describe('runGEPA_System', () => {
       { id: '6', user: 'Solve this equation', meta: null }
     ];
 
-    const execute = jest.fn().mockResolvedValue({
+    const execute: SystemExecute = async () => ({
       output: 'Mock response',
       traces: { system: 'Mock system' }
     });
 
-    const muf = jest.fn().mockResolvedValue({
+    const muf: FeedbackMuF = async () => ({
       score: 0.3, // Lower score to trigger stagnation
       feedbackText: 'Poor response'
     });
 
-    const llm = {
-      complete: jest.fn().mockResolvedValue('Mock completion')
+    const llm: LLM = {
+      complete: async () => 'Mock completion'
     };
 
     const options: GepaOptions = {
@@ -204,16 +210,18 @@ describe('runGEPA_System', () => {
 
   it('falls back to use Pareto items as feedback if split yields none', async () => {
     // Mock the reflection module
-    const mockProposeNewModule = jest.fn().mockResolvedValue({ system: 'Improved.' });
+    const mockProposeNewModule = async () => ({ system: 'Improved.' });
     jest.doMock('../src/reflection.js', () => ({
       proposeNewModule: mockProposeNewModule,
-      summarizeTraces: jest.fn().mockReturnValue('mock trace')
+      summarizeTraces: () => 'mock trace'
     }));
 
     // Mock the strategy module
     jest.doMock('../src/strategy.js', () => ({
-      prefilterStrategies: jest.fn().mockResolvedValue({
-        kept: [{ id: 'test-strategy', hint: 'Test hint' }]
+      prefilterStrategies: async () => ({
+        kept: [{ id: 'test-strategy', hint: 'Test hint' }],
+        scores: {},
+        raw: ''
       })
     }));
 
@@ -223,18 +231,18 @@ describe('runGEPA_System', () => {
       { id: '2', user: 'How are you?', meta: null }
     ];
 
-    const execute = jest.fn().mockResolvedValue({
+    const execute: SystemExecute = async () => ({
       output: 'Mock response',
       traces: { system: 'Mock system' }
     });
 
-    const muf = jest.fn().mockResolvedValue({
+    const muf: FeedbackMuF = async () => ({
       score: 0.6,
       feedbackText: 'Good response'
     });
 
-    const llm = {
-      complete: jest.fn().mockResolvedValue('Mock completion')
+    const llm: LLM = {
+      complete: async () => 'Mock completion'
     };
 
     const options: GepaOptions = {
