@@ -6,6 +6,9 @@
 
 > **Genetic-Pareto prompt optimizer** to evolve system prompts from a few rollouts. GEPA performs natural-language reflection over full trajectories, mutates prompts with multiple strategies, and maintains a Pareto frontier rather than collapsing to a single candidate.**This is NOT the official GEPA implementation.** 
 
+![GEPA performance improvements](img/graph_gepa.png)
+
+Source: [GEPA: REFLECTIVE PROMPT EVOLUTION CAN OUTPERFORM REINFORCEMENT LEARNING (arXiv)](https://arxiv.org/pdf/2507.19457)
 
 ## 🚀 Quick Start
 
