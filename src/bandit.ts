@@ -11,13 +11,18 @@ export class UCB1 {
 
     pick(): string {
         this.t++;
-        const c = Math.sqrt(2);
+        const c = Math.sqrt(2); // Exploration parameter
         let bestId = this.stats[0]?.id ?? '';
         let bestU = -Infinity;
+
         for (const s of this.stats) {
-            const bonus = s.n ? c * Math.sqrt(Math.log(this.t) / s.n) : Number.POSITIVE_INFINITY;
-            const u = (s.n ? s.mean : 0) + bonus;
-            if (u > bestU) { bestU = u; bestId = s.id; }
+            // UCB1 formula: mean reward + exploration bonus
+            const bonus = s.n > 0 ? c * Math.sqrt(Math.log(this.t) / s.n) : Number.POSITIVE_INFINITY;
+            const u = s.mean + bonus;
+            if (u > bestU) {
+                bestU = u;
+                bestId = s.id;
+            }
         }
         return bestId;
     }

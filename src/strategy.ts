@@ -36,7 +36,7 @@ export async function prefilterStrategies(
     'Unknowns should be 0. Base strictly on the provided tasks. No extra keys. No prose.',
     '',
     'Tasks preview:',
-    ...taskPreview.slice(0, 8).map((t, i) => `${i + 1}. ${t.slice(0, 280)}`),
+    ...taskPreview.slice(0, 8).map((t, i) => `${i + 1}. ${t}`),
     '',
     'Strategies:',
     ...strategies.map(s => `- ${s.id}: ${s.hint.slice(0, 240)}`),

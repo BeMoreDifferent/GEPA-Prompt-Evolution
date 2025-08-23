@@ -1,43 +1,96 @@
 import type { Candidate } from './types.js';
 
-/** Pareto-based candidate selection (Algorithm-2 style). Returns index k in P. */
-export function selectCandidate(P: Candidate[], S: number[][]): number {
-  if (P.length === 0) return 0;
-  const nItems = S[0]?.length ?? 0;
-  if (nItems === 0) return 0;
-
-  // Instance-wise best sets P*[i]
-  const Pstar: Array<Set<number>> = Array.from({ length: nItems }, (_, i) => {
+function getInstanceWiseBests(
+  numCandidates: number,
+  scores: number[][]
+): Array<Set<number>> {
+  const nItems = scores[0]?.length ?? 0;
+  return Array.from({ length: nItems }, (_, i) => {
     let best = -Infinity;
-    for (let k = 0; k < P.length; k++) best = Math.max(best, S[k]?.[i] ?? -Infinity);
+    for (let k = 0; k < numCandidates; k++) {
+      best = Math.max(best, scores[k]?.[i] ?? -Infinity);
+    }
     const set = new Set<number>();
-    for (let k = 0; k < P.length; k++) if ((S[k]?.[i] ?? -Infinity) === best) set.add(k);
+    for (let k = 0; k < numCandidates; k++) {
+      if ((scores[k]?.[i] ?? -Infinity) === best) {
+        set.add(k);
+      }
+    }
     return set;
   });
+}
 
-  // Union and prune dominated
-  const C = new Set<number>(); for (const s of Pstar) for (const k of s) C.add(k);
-  const Carr = [...C];
+function pruneDominated(
+  candidateSet: Set<number>,
+  scores: number[][]
+): number[] {
+  const nItems = scores[0]?.length ?? 0;
+  const candidates = [...candidateSet];
   const dominated = new Set<number>();
+
   const dominates = (a: number, b: number): boolean => {
-    let geAll = true, gtAny = false;
+    let geAll = true,
+      gtAny = false;
     for (let i = 0; i < nItems; i++) {
-      const Sa = S[a]?.[i] ?? -1e9;
-      const Sb = S[b]?.[i] ?? -1e9;
-      if (Sa < Sb) geAll = false;
-      if (Sa > Sb) gtAny = true;
+      const scoreA = scores[a]?.[i] ?? -1e9;
+      const scoreB = scores[b]?.[i] ?? -1e9;
+      if (scoreA < scoreB) geAll = false;
+      if (scoreA > scoreB) gtAny = true;
     }
     return geAll && gtAny;
   };
-  for (const a of Carr) for (const b of Carr) if (a !== b && dominates(b, a)) dominated.add(a);
-  const Cnon = Carr.filter(k => !dominated.has(k));
 
-  // Weighted by frequency of appearances in P*[i]
-  const freq = Cnon.map(k => Pstar.reduce((acc, set) => acc + (set.has(k) ? 1 : 0), 0));
-  const total = freq.reduce((a, b) => a + b, 0) || 1;
-  let r = Math.random() * total;
-  for (let i = 0; i < Cnon.length; i++) { r -= freq[i]; if (r <= 0) return Cnon[i]; }
-  return Cnon[Cnon.length - 1];
+  for (const a of candidates) {
+    for (const b of candidates) {
+      if (a !== b && dominates(b, a)) {
+        dominated.add(a);
+      }
+    }
+  }
+
+  return candidates.filter(k => !dominated.has(k));
+}
+
+function weightedSample(
+  candidates: number[],
+  weights: number[]
+): number {
+  const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
+  let r = Math.random() * totalWeight;
+  for (let i = 0; i < candidates.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return candidates[i];
+  }
+  return candidates[candidates.length - 1];
+}
+
+/** Pareto-based candidate selection (Algorithm-2 style). Returns index k in P. */
+export function selectCandidate(
+  candidates: Candidate[],
+  scores: number[][]
+): number {
+  if (candidates.length === 0) return 0;
+  const nItems = scores[0]?.length ?? 0;
+  if (nItems === 0) return 0;
+
+  // Instance-wise best sets
+  const instanceWiseBestSets = getInstanceWiseBests(candidates.length, scores);
+
+  // Union and prune dominated
+  const candidateUnion = new Set<number>();
+  for (const set of instanceWiseBestSets) {
+    for (const k of set) {
+      candidateUnion.add(k);
+    }
+  }
+  const nonDominated = pruneDominated(candidateUnion, scores);
+
+  // Weighted by frequency of appearances in instance-wise best sets
+  const frequencies = nonDominated.map(k =>
+    instanceWiseBestSets.reduce((acc, set) => acc + (set.has(k) ? 1 : 0), 0)
+  );
+
+  return weightedSample(nonDominated, frequencies);
 }
 
 
