@@ -144,6 +144,16 @@ export interface StrategyScheduleOptions {
   prefilterTopK?: number;         // default 10
   /** Cooldown in iterations before re-running prefilter when stagnating */
   reprefilterCooldownIters?: number; // default 6
+  /** Weight of global strategy log score in pre-filtering */
+  globalLogWeight?: number;        // default 0.5
+}
+
+export type PersistHook = (state: GEPAState, iterPayload: Record<string, unknown>) => Promise<void>;
+
+export interface RunPersist {
+  state?: GEPAState;
+  onCheckpoint?: PersistHook;
+  logger?: Logger;
 }
 
 

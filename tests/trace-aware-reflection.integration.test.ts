@@ -89,10 +89,14 @@ describe('Trace-aware reflection integration', () => {
       }
     });
 
-    const muf = async ({ item, output }: { item: TaskItem; output: string }) => ({
-      score: 0.8,
-      feedbackText: 'Good response'
-    });
+    let callCount = 0;
+    const muf = async ({ item, output }: { item: TaskItem; output: string }) => {
+      callCount++;
+      return {
+        score: callCount > 1 ? 0.9 : 0.1, // Low score for parent, high for child
+        feedbackText: 'Good response'
+      };
+    };
 
     let capturedPrompts: string[] = [];
     const llm = {
